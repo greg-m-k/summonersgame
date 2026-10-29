@@ -53,6 +53,14 @@ export function registerRoutes(app: FastifyInstance, rooms: RoomRegistry): void 
     return { ok: true, player: room.world.player(parsed.data.identity) };
   });
 
+  // Where does the demon's first token go? Same request as a demon turn, timed from inside this process.
+  app.get<{ Querystring: { model?: string; runs?: string } }>("/api/_bench/claude", async (req, reply) => {
+    if (req.headers["x-game-secret"] !== env.GAME_SERVER_SECRET) return reply.code(403).send({ error: "forbidden" });
+    if (!env.ANTHROPIC_API_KEY) return reply.code(400).send({ error: "no ANTHROPIC_API_KEY" });
+    const { benchClaude } = await import("./bench/claude.ts");
+    return benchClaude(env.ANTHROPIC_API_KEY, { model: req.query.model, runs: Number(req.query.runs) || 3 });
+  });
+
   // Agent-only routes, protected by the shared secret.
   const agentOnly = (headers: Record<string, unknown>): boolean => headers["x-game-secret"] === env.GAME_SERVER_SECRET;
 
