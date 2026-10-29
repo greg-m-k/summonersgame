@@ -5,7 +5,9 @@
   "compatibility_date": "2026-10-01",
   "compatibility_flags": ["nodejs_compat"],
   "account_id": "a5ac50eac3fc3bba71323b08817bd04e",
-  "routes": [{ "pattern": "games.greg.kitchen/summoners*", "zone_name": "greg.kitchen" }],
+  // A Custom Domain: Cloudflare creates the DNS record and certificate for games.greg.kitchen itself.
+  // (A plain route would need a proxied DNS record for the subdomain to exist first.)
+  "routes": [{ "pattern": "games.greg.kitchen", "custom_domain": true }],
   "assets": {
     "directory": "deploy/assets",
     "binding": "ASSETS",
