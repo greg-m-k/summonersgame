@@ -56,6 +56,13 @@ export function registerRoutes(app: FastifyInstance, rooms: RoomRegistry): void 
   // Agent-only routes, protected by the shared secret.
   const agentOnly = (headers: Record<string, unknown>): boolean => headers["x-game-secret"] === env.GAME_SERVER_SECRET;
 
+  app.get<{ Params: { room: string } }>("/api/rooms/:room/debug", async (req, reply) => {
+    if (!agentOnly(req.headers)) return reply.code(403).send({ error: "forbidden" });
+    const room = rooms.get(req.params.room);
+    if (!room) return reply.code(404).send({ error: "no such room" });
+    return room.debug();
+  });
+
   app.post<{ Params: { room: string } }>("/api/rooms/:room/transcript", async (req, reply) => {
     if (!agentOnly(req.headers)) return reply.code(403).send({ error: "forbidden" });
     const room = rooms.get(req.params.room);

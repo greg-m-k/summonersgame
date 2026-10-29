@@ -54,6 +54,8 @@ interface PlayerRecord {
   persona: Persona;
   /** When the roster poll first failed to see this player; null while present. */
   missingSince: number | null;
+  /** Last failure the demon reported, for the debug endpoint. */
+  lastDemonError: string | null;
 }
 
 /** One live game room: world, game master, mic bank, image pipeline, cost ledger, and LiveKit plumbing. */
@@ -138,6 +140,7 @@ export class GameRoom {
       redispatches: 0,
       persona,
       missingSince: null,
+      lastDemonError: null,
     };
     this.records.set(identity, rec);
     this.emptySince = null;
@@ -190,6 +193,27 @@ export class GameRoom {
     return this.records.get(identity)?.sessionKey === sessionKey;
   }
 
+  /** Operator view: who is here, which demon dispatch they have, and what the demons last complained about. */
+  debug(): unknown {
+    return {
+      room: this.name,
+      match: this.world.state.match,
+      budgetTripped: this.budgetTripped,
+      players: [...this.records.entries()].map(([identity, r]) => ({
+        identity,
+        name: this.world.player(identity)?.name,
+        team: this.world.player(identity)?.team,
+        demonIdentity: this.world.player(identity)?.demonIdentity ?? null,
+        persona: r.persona.name,
+        dispatchId: r.dispatchId,
+        dispatchedAt: new Date(r.dispatchedAt).toISOString(),
+        redispatches: r.redispatches,
+        missingSince: r.missingSince,
+        lastDemonError: r.lastDemonError,
+      })),
+    };
+  }
+
   registerDemon(
     playerIdentity: string,
     demonIdentity: string,
@@ -200,6 +224,8 @@ export class GameRoom {
     const p = this.world.player(playerIdentity);
     if (!p) return false;
     if (status === "error") {
+      const rec = this.records.get(playerIdentity);
+      if (rec) rec.lastDemonError = `${new Date().toISOString()} ${detail ?? "unknown error"}`;
       console.warn(`[room ${this.name}] demon ${p.persona} for ${p.name} failed: ${detail ?? "unknown error"}`);
       this.world.narrate(`${p.persona} fails to manifest for ${p.name}: ${detail ?? "unknown error"}`);
       this.world.setDemon(playerIdentity, null);

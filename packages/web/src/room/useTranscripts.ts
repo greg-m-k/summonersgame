@@ -55,7 +55,7 @@ export function useTranscripts(): void {
     } catch (err) {
       console.warn("transcription handler not registered", err);
     }
-    if (import.meta.env.DEV) (window as unknown as { __chat: typeof useChatStore }).__chat = useChatStore;
+    (window as unknown as { __chat: typeof useChatStore }).__chat = useChatStore;
     return () => room.unregisterTextStreamHandler("lk.transcription");
   }, [room]);
 }

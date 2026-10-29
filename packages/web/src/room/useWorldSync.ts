@@ -33,7 +33,7 @@ export function useWorldSync(): void {
   });
 
   useEffect(() => {
-    if (import.meta.env.DEV) (window as unknown as { __world: typeof useWorldStore }).__world = useWorldStore;
+    (window as unknown as { __world: typeof useWorldStore }).__world = useWorldStore; // for the harness, in every build
   }, []);
 
   useDataChannel(TOPIC_POSITIONS, (msg) => {
@@ -63,7 +63,7 @@ export function useWorldSync(): void {
     upsertChat({ id: `secret-${m.id}-${m.type}`, identity: SECRET, text, final: true, at: Date.now() });
   });
   useEffect(() => {
-    if (import.meta.env.DEV) (window as unknown as { __cost: typeof useCostStore }).__cost = useCostStore;
+    (window as unknown as { __cost: typeof useCostStore }).__cost = useCostStore;
   }, []);
 
   useEffect(() => {

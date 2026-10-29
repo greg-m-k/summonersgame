@@ -71,7 +71,7 @@ function RoomInner({ session }: { session: Session }) {
   useWorldSync();
   const room = useRoomContext();
   useEffect(() => {
-    if (import.meta.env.DEV) (window as unknown as { __room: typeof room }).__room = room;
+    (window as unknown as { __room: typeof room }).__room = room; // for the harness, in every build
   }, [room]);
   // Stable string key so zustand does not re-render on every unrelated store change.
   const onMicKey = useWorldStore((s) =>

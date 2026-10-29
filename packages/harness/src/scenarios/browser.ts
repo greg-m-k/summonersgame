@@ -110,8 +110,7 @@ export const browser: Scenario = {
         const after = await a.store();
         // The engine keeps paying points during a fight, so the bank can rise while held; the drain
         // itself is proven by the mic-time scenario. Here: released, and the server saw the hold.
-        const held = ctx.timeline.entries.filter((e) => e.kind === "console" && e.actor === a.opts.name && e.text.includes("mic_time")).length;
-        ctx.check("released: onRoomMic false after a server-acknowledged hold", !after.onRoomMic && held >= 2, `${bankA}s -> ${after.players[a.identity]?.micBank}s, ${held} mic_time events`);
+        ctx.check("released: onRoomMic false after a server-acknowledged hold", mid.onRoomMic && !after.onRoomMic, `${bankA}s -> ${after.players[a.identity]?.micBank}s`);
       } else {
         ctx.check("A has mic time to test the button", false, "bank 0");
       }

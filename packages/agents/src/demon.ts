@@ -74,7 +74,22 @@ export default defineAgent({
   entry: async (ctx: JobContext) => {
     const meta = parseMeta(ctx.job.metadata);
     const log = (msg: string) => console.log(`[demon ${meta.persona.name} for ${meta.playerIdentity}] ${msg}`);
+    try {
+      await run(ctx, meta, log);
+    } catch (err) {
+      // Whatever killed the job before the session could report it: tell the room, so the feed and
+      // the debug endpoint say why nobody manifested instead of a silent re-dispatch loop.
+      const detail = `${err instanceof Error ? `${err.name}: ${err.message}` : String(err)}`.slice(0, 300);
+      log(`job failed: ${detail}`);
+      await post(meta, "demon", { playerIdentity: meta.playerIdentity, demonIdentity: "none", status: "error", detail });
+      throw err;
+    }
+  },
+});
 
+async function run(ctx: JobContext, meta: DemonMeta, log: (msg: string) => void): Promise<void> {
+  {
+    log(`connecting to ${process.env.LIVEKIT_URL ?? "(no LIVEKIT_URL)"}`);
     await ctx.connect(undefined, AutoSubscribe.AUDIO_ONLY);
     log("connected, waiting for player");
     await ctx.waitForParticipant(meta.playerIdentity);
@@ -301,8 +316,8 @@ export default defineAgent({
     session.generateReply({
       instructions: `Greet ${meta.playerName} with your opening line, close to: "${meta.persona.opening}" Keep it to one sentence.`,
     });
-  },
-});
+  }
+}
 
 function decode(bytes: Uint8Array): unknown {
   return JSON.parse(new TextDecoder().decode(bytes));
