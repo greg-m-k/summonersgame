@@ -176,6 +176,33 @@ player-minute of lively play, so roughly $10 per player-hour, more than half of 
 - Prices live in `packages/shared/src/cost.ts`; `PRICE_STT_PER_MIN`, `PRICE_TTS_PER_CHAR`, `PRICE_IMAGE_EACH`
   override the third-party rates. Mocked stages cost nothing and are not metered.
 
+## Latency: what a player waits for
+
+Measured 2026-10-29 with the same demon-shaped request (Sonnet 5.5, effort low, ~450-token persona, one
+short line back) timed to the first text token:
+
+| where | thinking | first token |
+|---|---|---|
+| a home desktop | adaptive | 1.1 to 2.1 s |
+| a home desktop | off (`between_tools`) | 1.1 to 1.5 s |
+| inside the Cloudflare game-server container | either | 1.2 to 2.4 s |
+| Opus 5.5 | adaptive | 1.9 s |
+| Haiku 5.5 | adaptive | 0.65 s |
+
+Conclusions: the model is the floor (Sonnet needs over a second to start talking wherever you call it from);
+Cloudflare's egress adds 0.1 to 0.3 s, not worth moving the demons for; thinking mode and the server-side
+fallback header cost nothing measurable; the extra second seen in live demons (2.6 s) is the agents pipeline
+with a growing, uncached conversation. What the player feels is ears (Deepgram end-of-turn, ~0.3 to 1 s) plus
+brain plus voice (Cartesia, 0.2 s), 2.5 to 3.5 s before the demon starts, and about 5 s before the game master
+changes the world. Decided: stay with Deepgram in the demon rather than browser speech recognition (free, but
+Chrome-only, no interim words, no voice turn-taking, worse in a loud room). Levers not yet pulled: the
+framework's preemptive generation (start Claude on the interim transcript), caching the persona by padding it
+past 512 tokens and capping history, and `DEMON_MODEL=claude-haiku-5-5` as a quality experiment.
+
+Reproduce: `node scripts/bench-claude.mjs [model] [runs] [variants]` from anywhere, or
+`GET /summoners/api/_bench/claude?runs=4` with the `x-game-secret` header to time it from inside the container.
+Every live session also records per-stage timings in its log (see Session logs).
+
 ## Deploy (Cloudflare)
 
 Live at https://games.greg.kitchen/summoners. One Worker (`deploy/worker.ts`, `wrangler.jsonc`) serves the
