@@ -176,6 +176,24 @@ player-minute of lively play, so roughly $10 per player-hour, more than half of 
 - Prices live in `packages/shared/src/cost.ts`; `PRICE_STT_PER_MIN`, `PRICE_TTS_PER_CHAR`, `PRICE_IMAGE_EACH`
   override the third-party rates. Mocked stages cost nothing and are not metered.
 
+## Deploy (Cloudflare)
+
+Live at https://games.greg.kitchen/summoners. One Worker (`deploy/worker.ts`, `wrangler.jsonc`) serves the
+built client and proxies `/summoners/api/*` to the game server, which runs as a Cloudflare Container next to
+the demons container (the LiveKit agents worker). The demons are woken whenever someone joins and kept awake
+by a five-minute cron while rooms exist; both containers sleep after twenty idle minutes, so an idle deployment
+costs nothing beyond the Workers Paid plan.
+
+```bash
+npm run deploy           # build the client, build and push both images, deploy (needs wrangler login + Docker)
+npm run deploy:secrets   # push the keys in .env to the Worker, which hands them to the containers
+```
+
+Pushing to `main` does the same through `.github/workflows/deploy.yml`, reading the keys from GitHub repository
+secrets (`CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, and the same names as `.env`). LiveKit must be a
+LiveKit Cloud project in production: Cloudflare Containers cannot expose the UDP ports a self-hosted LiveKit
+needs, so `LIVEKIT_URL` is the project's `wss://` URL and the agents worker connects outbound to it.
+
 ## Harness: drive the game with synthetic players
 
 `packages/harness` joins real rooms with bot players, speaks, watches everything, and writes a report
