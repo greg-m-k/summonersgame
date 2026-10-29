@@ -37,10 +37,11 @@
     ]
   },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["GameServer", "DemonWorker"] }],
+  "d1_databases": [{ "binding": "LOGS", "database_name": "summoners-logs", "database_id": "0765e37c-b127-4230-bb9a-a02e2eb4ca49" }],
   "triggers": { "crons": ["*/5 * * * *"] },
   "vars": {
     "PUBLIC_URL": "https://games.greg.kitchen/summoners",
-    "INSTANCE_GEN": "6",
+    "INSTANCE_GEN": "8",
     "HEART_HP": "1200"
   },
   "observability": { "enabled": true }

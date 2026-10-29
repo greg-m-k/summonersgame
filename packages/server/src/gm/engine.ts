@@ -30,6 +30,8 @@ export interface GmOptions {
   enabled?: boolean;
   /** Token usage per round, summed over every model call in it. */
   onUsage?: (usage: GmUsage) => void;
+  /** Round timing for the session log: when the batch was sent and how long Claude took. */
+  onRound?: (round: { utterances: number; waitedMs: number; durationMs: number; tools: number }) => void;
 }
 
 type Msg = Anthropic.Beta.BetaMessageParam;
@@ -65,6 +67,7 @@ export class GmEngine {
     this.minIntervalMs = opts.minIntervalMs ?? (Number(process.env.GM_ROUND_MS) || 7000);
     this.maxHistory = opts.maxHistoryMessages ?? 24;
     this.onUsage = opts.onUsage;
+    this.onRound = opts.onRound;
     this.enabled = opts.enabled ?? Boolean(process.env.ANTHROPIC_API_KEY);
     this.mock = process.env.GM_MOCK === "1" || !this.enabled;
     if (!this.mock) console.log(`[gm] ${this.model} at effort ${this.effort}`);
@@ -74,6 +77,7 @@ export class GmEngine {
 
   private mock: boolean;
   private onUsage: ((usage: GmUsage) => void) | undefined;
+  private onRound: GmOptions["onRound"];
   private paused = false;
   /** Tool results of the last round, waiting to open the next round's user turn. */
   private pendingResults: Anthropic.Beta.BetaUserMessageParam | null = null;
@@ -156,6 +160,12 @@ export class GmEngine {
         players: [...new Set(batch.map((u) => u.playerId))],
       };
       this.onUsage?.(used);
+      this.onRound?.({
+        utterances: batch.length,
+        waitedMs: started - Math.min(...batch.map((u) => u.ts)),
+        durationMs: Date.now() - started,
+        tools: final.content.filter((b) => b.type === "tool_use").length,
+      });
       if (final.stop_reason === "refusal") {
         console.warn("[gm] round refused:", final.stop_details?.category ?? "unknown");
       }

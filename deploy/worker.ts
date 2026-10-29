@@ -10,6 +10,7 @@ interface Env {
   ASSETS: Fetcher;
   GAME_SERVER: DurableObjectNamespace<GameServer>;
   DEMON_WORKER: DurableObjectNamespace<DemonWorker>;
+  LOGS: D1Database;
   PUBLIC_URL: string;
   /** Bump to leave stale Durable Object instances (old code, old secrets) behind. */
   INSTANCE_GEN?: string;
@@ -40,6 +41,7 @@ function sharedEnv(env: Env): Record<string, string> {
     LIVEKIT_API_SECRET: env.LIVEKIT_API_SECRET ?? "",
     GAME_SERVER_SECRET: env.GAME_SERVER_SECRET ?? "",
     GAME_SERVER_URL: env.PUBLIC_URL,
+    LOG_SINK_URL: `${env.PUBLIC_URL}/_ops/log`,
     NODE_ENV: "production",
   };
   for (const k of ["ANTHROPIC_API_KEY", "DEEPGRAM_API_KEY", "CARTESIA_API_KEY", "FAL_API_KEY", "HEART_HP", "ROOM_BUDGET_USD"] as const) {
@@ -121,6 +123,13 @@ export default {
     if (url.pathname === BASE) return Response.redirect(`${url.origin}${BASE}/`, 302);
     if (!url.pathname.startsWith(`${BASE}/`)) return new Response("not here", { status: 404 });
 
+    try {
+      const ops = await opsRoutes(request, env, url);
+      if (ops) return ops;
+    } catch (err) {
+      return new Response(`ops error: ${err instanceof Error ? err.message : String(err)}`, { status: 500 });
+    }
+
     // Ops: secrets reach a container only when its process starts, so rotating them needs this.
     if (url.pathname === `${BASE}/_ops/restart`) {
       if (request.method !== "POST" || request.headers.get("x-game-secret") !== env.GAME_SERVER_SECRET) {
@@ -172,3 +181,48 @@ export default {
     );
   },
 };
+
+// ---- session log (D1) ---------------------------------------------------------------------------
+
+interface LogEvent {
+  ts: number;
+  kind: string;
+  data: unknown;
+}
+
+const secretOk = (request: Request, env: Env): boolean => request.headers.get("x-game-secret") === env.GAME_SERVER_SECRET;
+
+/**
+ * The game server posts batches of everything that happens in a room; they land in D1 so a session
+ * can be studied after the containers have slept. Read back per room or as a list of sessions.
+ */
+async function opsRoutes(request: Request, env: Env, url: URL): Promise<Response | null> {
+  if (!url.pathname.startsWith(`${BASE}/_ops/`)) return null;
+  const path = url.pathname.slice(`${BASE}/_ops`.length);
+  if (path === "/restart") return null;
+  if (!secretOk(request, env)) return new Response("forbidden", { status: 403 });
+
+  if (path === "/log" && request.method === "POST") {
+    const body = (await request.json()) as { room: string; events: LogEvent[] };
+    if (!body?.room || !Array.isArray(body.events) || !body.events.length) return Response.json({ ok: true, written: 0 });
+    const stmt = env.LOGS.prepare("INSERT INTO events (room, ts, kind, data) VALUES (?1, ?2, ?3, ?4)");
+    await env.LOGS.batch(body.events.slice(0, 500).map((e) => stmt.bind(body.room, e.ts, e.kind, JSON.stringify(e.data ?? null))));
+    return Response.json({ ok: true, written: Math.min(500, body.events.length) });
+  }
+
+  if (path === "/sessions" && request.method === "GET") {
+    const rows = await env.LOGS.prepare(
+      "SELECT room, MIN(ts) AS startedAt, MAX(ts) AS endedAt, COUNT(*) AS events, SUM(CASE WHEN kind = 'utterance' THEN 1 ELSE 0 END) AS utterances FROM events GROUP BY room ORDER BY MAX(ts) DESC LIMIT 100",
+    ).all();
+    return Response.json(rows.results);
+  }
+
+  const m = /^\/rooms\/([^/]+)\/log$/.exec(path);
+  if (m && request.method === "GET") {
+    const room = decodeURIComponent(m[1]!);
+    const since = Number(url.searchParams.get("since") ?? 0);
+    const rows = await env.LOGS.prepare("SELECT ts, kind, data FROM events WHERE room = ?1 AND ts > ?2 ORDER BY ts, id LIMIT 20000").bind(room, since).all();
+    return Response.json(rows.results.map((r) => ({ ts: r.ts, kind: r.kind, data: JSON.parse(String(r.data)) })));
+  }
+  return new Response("not found", { status: 404 });
+}

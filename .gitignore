@@ -9,3 +9,5 @@ packages/harness/runs/
 packages/harness/fixtures/tts/
 deploy/assets/
 .wrangler/
+packages/server/logs/
+reports/

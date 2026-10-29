@@ -14,6 +14,7 @@ import {
   type WorldEvent,
 } from "@summoners/shared";
 import { CostLedger } from "./cost/ledger.ts";
+import { SessionLog } from "./log/sessionLog.ts";
 import { Temptations } from "./temptations.ts";
 import { env, prices } from "./env.ts";
 import { type GmUsage, GmEngine } from "./gm/engine.ts";
@@ -68,6 +69,7 @@ export class GameRoom {
   readonly images: ImageService;
   readonly cost: CostLedger;
   readonly temptations: Temptations;
+  readonly log: SessionLog;
   private records = new Map<string, PlayerRecord>();
   private timers: ReturnType<typeof setInterval>[] = [];
   private snapshotTimer: ReturnType<typeof setTimeout> | undefined;
@@ -81,6 +83,8 @@ export class GameRoom {
     readonly name: string,
     private onEmpty: (room: GameRoom) => void,
   ) {
+    this.log = new SessionLog(name, { url: env.LOG_SINK_URL, secret: env.GAME_SERVER_SECRET });
+    this.log.add("room_created", { heartHp: env.HEART_HP ?? null });
     this.world = new World(name, undefined, { heartHp: env.HEART_HP });
     this.world.hooks.onHeartDown = (winner) => this.endMatch(winner);
     this.temptations = new Temptations(this.world, {
@@ -88,14 +92,17 @@ export class GameRoom {
         const demon = this.world.player(playerId)?.demonIdentity;
         if (demon) void sendToIdentity(this.name, demon, TOPIC_DEMON, msg);
       },
-      toPlayer: (playerId, msg) => void sendToIdentity(this.name, playerId, TOPIC_SECRET, msg),
+      toPlayer: (playerId, msg) => {
+        this.log.add("secret", { playerId, ...msg });
+        void sendToIdentity(this.name, playerId, TOPIC_SECRET, msg);
+      },
     });
     this.cost = new CostLedger(name, prices, env.ROOM_BUDGET_USD);
     this.images = new ImageService((entityId, url) => this.world.setEntityImage(entityId, url), {
       falKey: env.FAL_KEY,
       onUsage: (entity) => this.recordUsage({ kind: "image", images: 1, playerId: entity.ownerId, ts: Date.now() }),
     });
-    this.gm = new GmEngine(this.world, { onUsage: (u) => this.recordGm(u) });
+    this.gm = new GmEngine(this.world, { onUsage: (u) => this.recordGm(u), onRound: (round) => this.log.add("gm_round", round) });
     this.mic = new MicController(this.world, {
       setDemonHearsPlayer: (playerId, hears) => this.setDemonHears(playerId, hears),
     });
@@ -114,6 +121,7 @@ export class GameRoom {
 
   private onWorldEvent(ev: WorldEvent): void {
     void broadcastReliable(this.name, ev);
+    if (ev.type !== "heal") this.log.add("event", ev);
     this.temptations.onEvent(ev);
     if (!this.budgetTripped && (ev.type === "summon" || (ev.type === "transform" && ev.entity.imageUrl === null))) {
       this.images.request(ev.entity);
@@ -232,12 +240,14 @@ export class GameRoom {
     if (status === "error") {
       const rec = this.records.get(playerIdentity);
       if (rec) rec.lastDemonError = `${new Date().toISOString()} ${detail ?? "unknown error"}`;
+      this.log.add("demon_error", { playerId: playerIdentity, name: p.name, persona: p.persona, detail: detail ?? null });
       console.warn(`[room ${this.name}] demon ${p.persona} for ${p.name} failed: ${detail ?? "unknown error"}`);
       this.world.narrate(`${p.persona} fails to manifest for ${p.name}: ${detail ?? "unknown error"}`);
       this.world.setDemon(playerIdentity, null);
       return true;
     }
     this.world.setDemon(playerIdentity, demonIdentity);
+    this.log.add("demon_online", { playerId: playerIdentity, name: p.name, persona: p.persona, demonIdentity, mocks });
     if (mocks.length) {
       this.world.narrate(`${p.persona} manifests for ${p.name} on mock ${mocks.join(", ")} (no API key). Type to it if it cannot hear words.`);
     }
@@ -245,10 +255,19 @@ export class GameRoom {
     return true;
   }
 
+  /** What a demon said out loud, reported by the agent for the session log. */
+  demonSaid(playerIdentity: string, text: string): boolean {
+    const p = this.world.player(playerIdentity);
+    if (!p) return false;
+    this.log.add("demon_said", { playerId: playerIdentity, name: p.name, persona: p.persona, text });
+    return true;
+  }
+
   transcript(playerIdentity: string, text: string, ts: number): boolean {
     const p = this.world.player(playerIdentity);
     if (!p) return false;
     this.temptations.onTranscript(playerIdentity);
+    this.log.add("utterance", { playerId: playerIdentity, name: p.name, text, ts });
     this.gm.push({ playerId: playerIdentity, name: p.name, text, ts });
     return true;
   }
@@ -335,6 +354,7 @@ export class GameRoom {
     const minute = total - this.lastLoggedUsd;
     this.lastLoggedUsd = total;
     const s = this.cost.summary();
+    this.log.add("cost", s);
     const by = SERVICES.filter((k) => s.byService[k].usd > 0)
       .map((k) => `${k} $${s.byService[k].usd.toFixed(3)}`)
       .join(", ");
@@ -403,6 +423,8 @@ export class GameRoom {
     this.mic.dispose();
     this.gm.dispose();
     this.logCost();
+    this.log.add("room_disposed", { totalUsd: this.cost.totalUsd });
+    void this.log.dispose();
   }
 }
 

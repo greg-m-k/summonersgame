@@ -205,6 +205,24 @@ Operating it:
   count, and the last error the demon reported. That is where "no demon" problems show up first.
 - The agents image needs `ca-certificates`; without them the native LiveKit engine cannot open TLS.
 
+## Session logs: learn from real games
+
+Every room ships everything that happens to Cloudflare D1 through the Worker (`/_ops/log`): world events,
+what each player said, what each demon said, demon failures, bribes offered and taken, game-master round
+timings, per-stage latency from the demon pipeline (Deepgram end-of-turn, Claude first token, Cartesia first
+audio), and a cost snapshot per minute. Locally, with no Worker, the same stream goes to
+`packages/server/logs/<room>.jsonl`.
+
+```bash
+node scripts/session-report.mjs            # recent sessions: room, start, minutes, events, utterances
+node scripts/session-report.mjs static-925 # writes reports/static-925.md
+```
+
+The report has players, numbers, matches and bribes, a latency table (median and p90 per stage, then per
+utterance: how long until the game master finished, until the world changed, until the demon replied), every
+summon with its stats, and the full timeline. Raw rows: `GET /summoners/_ops/sessions` and
+`GET /summoners/_ops/rooms/ROOM/log` with the `x-game-secret` header.
+
 ## Harness: drive the game with synthetic players
 
 `packages/harness` joins real rooms with bot players, speaks, watches everything, and writes a report

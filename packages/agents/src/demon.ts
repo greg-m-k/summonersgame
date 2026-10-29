@@ -167,6 +167,7 @@ async function run(ctx: JobContext, meta: DemonMeta, log: (msg: string) => void)
       const ts = Date.now();
       if (m.type === "llm_metrics") {
         log(`llm ${m.label}: first token ${Math.round(m.ttftMs)}ms, total ${Math.round(m.durationMs)}ms, ${m.completionTokens} tokens out`);
+        void post(meta, "metric", { playerIdentity: meta.playerIdentity, stage: "llm", label: m.label, ttftMs: Math.round(m.ttftMs), durationMs: Math.round(m.durationMs), tokens: m.completionTokens, cancelled: m.cancelled, ts });
         if (!isMock(m.label)) {
           usage.push({
             ...who,
@@ -183,7 +184,11 @@ async function run(ctx: JobContext, meta: DemonMeta, log: (msg: string) => void)
         }
       } else if (m.type === "tts_metrics") {
         log(`tts ${m.label}: first audio ${Math.round(m.ttfbMs)}ms for ${m.charactersCount} chars`);
+        void post(meta, "metric", { playerIdentity: meta.playerIdentity, stage: "tts", label: m.label, ttfbMs: Math.round(m.ttfbMs), durationMs: Math.round(m.durationMs), chars: m.charactersCount, ts });
         if (!isMock(m.label)) usage.push({ ...who, ts, kind: "tts", chars: m.charactersCount });
+      } else if (m.type === "eou_metrics") {
+        const e = m as unknown as { endOfUtteranceDelayMs?: number; transcriptionDelayMs?: number };
+        void post(meta, "metric", { playerIdentity: meta.playerIdentity, stage: "ears", endOfUtteranceDelayMs: Math.round(e.endOfUtteranceDelayMs ?? 0), transcriptionDelayMs: Math.round(e.transcriptionDelayMs ?? 0), ts });
       } else if (m.type === "stt_metrics") {
         if (!isMock(m.label) && m.audioDurationMs > 0) usage.push({ ...who, ts, kind: "stt", seconds: m.audioDurationMs / 1000 });
       }
@@ -210,6 +215,13 @@ async function run(ctx: JobContext, meta: DemonMeta, log: (msg: string) => void)
     });
 
     const forward = (text: string) => post(meta, "transcript", { playerIdentity: meta.playerIdentity, text, ts: Date.now() });
+
+    // Every finished demon line goes to the room's session log.
+    session.on(voice.AgentSessionEventTypes.ConversationItemAdded, (ev) => {
+      const item = ev.item as { role?: string; textContent?: string };
+      const text = item.role === "assistant" ? item.textContent?.trim() : "";
+      if (text) void post(meta, "demon-said", { playerIdentity: meta.playerIdentity, text, ts: Date.now() });
+    });
 
     session.on(voice.AgentSessionEventTypes.UserInputTranscribed, (ev) => {
       if (!ev.isFinal || paused) return;
@@ -332,7 +344,7 @@ function WorldStateLoose(json: string): WorldState | null {
   }
 }
 
-async function post(meta: DemonMeta, path: "transcript" | "demon" | "usage", body: unknown): Promise<void> {
+async function post(meta: DemonMeta, path: "transcript" | "demon" | "usage" | "demon-said" | "metric", body: unknown): Promise<void> {
   try {
     const res = await fetch(`${meta.serverUrl}/api/rooms/${encodeURIComponent(meta.room)}/${path}`, {
       method: "POST",

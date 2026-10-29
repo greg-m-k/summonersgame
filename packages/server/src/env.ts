@@ -25,6 +25,8 @@ export const env = {
   FAL_KEY: process.env.FAL_KEY || process.env.FAL_API_KEY || "",
   GAME_SERVER_SECRET: process.env.GAME_SERVER_SECRET ?? "change-me",
   GAME_SERVER_URL: process.env.GAME_SERVER_URL ?? `http://localhost:${process.env.PORT ?? 8787}`,
+  /** Where room logs go (the Worker's /_ops/log); unset means packages/server/logs/<room>.jsonl. */
+  LOG_SINK_URL: process.env.LOG_SINK_URL || undefined,
   /** Agents dispatch name; must match ServerOptions.agentName in packages/agents. */
   DEMON_AGENT_NAME: process.env.DEMON_AGENT_NAME ?? "demon",
   /** Hit points of each team's heart (default in packages/shared); small values make short matches for testing. */

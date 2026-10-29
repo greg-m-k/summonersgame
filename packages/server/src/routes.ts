@@ -63,6 +63,24 @@ export function registerRoutes(app: FastifyInstance, rooms: RoomRegistry): void 
     return room.debug();
   });
 
+  // Per-stage latency from the demon pipeline (Deepgram end-of-turn, Claude first token, Cartesia first audio).
+  app.post<{ Params: { room: string }; Body: { playerIdentity?: string } }>("/api/rooms/:room/metric", async (req, reply) => {
+    if (!agentOnly(req.headers)) return reply.code(403).send({ error: "forbidden" });
+    const room = rooms.get(req.params.room);
+    if (!room) return reply.code(404).send({ error: "no such room" });
+    room.log.add("metric", req.body);
+    return { ok: true };
+  });
+
+  app.post<{ Params: { room: string } }>("/api/rooms/:room/demon-said", async (req, reply) => {
+    if (!agentOnly(req.headers)) return reply.code(403).send({ error: "forbidden" });
+    const room = rooms.get(req.params.room);
+    if (!room) return reply.code(404).send({ error: "no such room" });
+    const parsed = TranscriptPost.safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: "bad request" });
+    return room.demonSaid(parsed.data.playerIdentity, parsed.data.text) ? { ok: true } : reply.code(404).send({ error: "unknown player" });
+  });
+
   app.post<{ Params: { room: string } }>("/api/rooms/:room/transcript", async (req, reply) => {
     if (!agentOnly(req.headers)) return reply.code(403).send({ error: "forbidden" });
     const room = rooms.get(req.params.room);
