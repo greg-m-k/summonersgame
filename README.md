@@ -190,9 +190,20 @@ npm run deploy:secrets   # push the keys in .env to the Worker, which hands them
 ```
 
 Pushing to `main` does the same through `.github/workflows/deploy.yml`, reading the keys from GitHub repository
-secrets (`CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, and the same names as `.env`). LiveKit must be a
-LiveKit Cloud project in production: Cloudflare Containers cannot expose the UDP ports a self-hosted LiveKit
-needs, so `LIVEKIT_URL` is the project's `wss://` URL and the agents worker connects outbound to it.
+secrets (`CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, and the same names as `.env`).
+
+LiveKit cannot run on Cloudflare (WebRTC media is UDP; Containers only take HTTP), so it is self-hosted on a
+Linode with a public IP: `deploy/livekit-linode.sh` installs `livekit-server` and Caddy (TLS) and opens the
+firewall; `scripts/pull-livekit-keys.sh` copies the generated keys into `.env`, the Worker, and GitHub.
+
+Operating it:
+
+- Secrets reach a container only when its process starts, and Durable Objects keep old code and secrets until
+  evicted. After rotating secrets, bump `INSTANCE_GEN` in `wrangler.jsonc` and deploy (new instances, the old
+  ones drain). `POST /summoners/_ops/restart` with the `x-game-secret` header restarts the current ones.
+- `GET /summoners/api/rooms/ROOM/debug` with the same header shows each player's demon dispatch, re-dispatch
+  count, and the last error the demon reported. That is where "no demon" problems show up first.
+- The agents image needs `ca-certificates`; without them the native LiveKit engine cannot open TLS.
 
 ## Harness: drive the game with synthetic players
 
