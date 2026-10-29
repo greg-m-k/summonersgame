@@ -24,6 +24,18 @@ Audio routing (all through LiveKit selective subscription):
   other clients subscribe to you. Releasing (or running out of seconds) reverses both.
 - The game master never hears audio. It reads the final transcripts the demons forward.
 
+## The AI layer
+
+Three roles, each the cheapest model that does the job, none talking to a provider without a reason:
+
+| role | model | when | job |
+|---|---|---|---|
+| Router | Haiku 5.5 | every line a player says | classify: summon, transform, attack, warp, talent pick, or chatter. Chatter and questions to the demon stop here; a talent pick is applied directly ("take sharp teeth"); the rest goes to the game master. Under a second, a thousandth of a cent. |
+| Game master | Opus 5.5 | one round per batch of actionable lines, 7 s apart | make the words real with tools (stats, pictures, strikes, warps, creativity points) and narrate in the same reply; history cached |
+| Demon | Sonnet 5.5 | every turn the player takes, plus reactions to world events and bribes | talk back in character; preemptive generation on the interim transcript, persona cached, history capped at 16 turns |
+
+The combat engine, points, bribes, levels, and talents are plain code on the server tick; no model is in that loop.
+
 ## The game
 
 Two teams, Ash and Tide. Players are dealt to the smaller team as they join. Each team has a heart, a

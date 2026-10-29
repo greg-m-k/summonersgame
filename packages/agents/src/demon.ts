@@ -116,7 +116,9 @@ async function run(ctx: JobContext, meta: DemonMeta, log: (msg: string) => void)
       stt: pipeline.stt,
       llm: pipeline.llm,
       tts: pipeline.tts,
-      turnHandling: { turnDetection: "vad" },
+      // Start thinking on the interim transcript, before Deepgram declares the turn over: hides most
+      // of Claude's first-token wait behind the end-of-turn silence.
+      turnHandling: { turnDetection: "vad", preemptiveGeneration: { enabled: true } },
     });
 
     let paused = false;

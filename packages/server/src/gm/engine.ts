@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { World } from "../world/state.ts";
 import { GM_SYSTEM_PROMPT } from "./prompt.ts";
+import { type Intent, IntentRouter, mockClassify } from "./router.ts";
 import { makeGmTools } from "./tools.ts";
 
 export interface Utterance {
@@ -30,6 +31,8 @@ export interface GmOptions {
   enabled?: boolean;
   /** Token usage per round, summed over every model call in it. */
   onUsage?: (usage: GmUsage) => void;
+  /** What the router decided about each line, before (or instead of) a round. */
+  onIntent?: (u: Utterance, intent: Intent) => void;
   /** Round timing for the session log: when the batch was sent and how long Claude took. */
   onRound?: (round: { utterances: number; waitedMs: number; durationMs: number; tools: number }) => void;
 }
@@ -68,8 +71,10 @@ export class GmEngine {
     this.maxHistory = opts.maxHistoryMessages ?? 24;
     this.onUsage = opts.onUsage;
     this.onRound = opts.onRound;
+    this.onIntent = opts.onIntent;
     this.enabled = opts.enabled ?? Boolean(process.env.ANTHROPIC_API_KEY);
     this.mock = process.env.GM_MOCK === "1" || !this.enabled;
+    this.router = this.mock ? null : new IntentRouter();
     if (!this.mock) console.log(`[gm] ${this.model} at effort ${this.effort}`);
     if (process.env.GM_MOCK === "1") console.warn("[gm] GM_MOCK=1: scripted game master, no Claude calls");
     else if (!this.enabled) console.warn("[gm] ANTHROPIC_API_KEY missing: scripted game master (every utterance summons, fights break out)");
@@ -78,6 +83,8 @@ export class GmEngine {
   private mock: boolean;
   private onUsage: ((usage: GmUsage) => void) | undefined;
   private onRound: GmOptions["onRound"];
+  private onIntent: GmOptions["onIntent"];
+  private router: IntentRouter | null = null;
   private paused = false;
   /** Tool results of the last round, waiting to open the next round's user turn. */
   private pendingResults: Anthropic.Beta.BetaUserMessageParam | null = null;
@@ -98,12 +105,32 @@ export class GmEngine {
       console.log(`[gm:paused] ${u.name}: ${u.text}`);
       return;
     }
-    if (this.mock) {
-      this.mockRound(u);
+    void this.route(u);
+  }
+
+  /**
+   * The cheap reader goes first: chatter stops here, talent picks are handed to the room, and only
+   * lines that change the dream are queued for an Opus round.
+   */
+  private async route(u: Utterance): Promise<void> {
+    let intent: Intent;
+    if (this.router) {
+      try {
+        const r = await this.router.classify(u.text);
+        intent = r.intent;
+        if (r.usage) this.onUsage?.({ ...r.usage, calls: 1, players: [u.playerId] });
+      } catch (err) {
+        console.warn("[gm] router failed, treating as a summon:", err instanceof Error ? err.message : err);
+        intent = { kind: "summon", talentId: null, gist: u.text.slice(0, 80) };
+      }
+    } else intent = mockClassify(u.text);
+    this.onIntent?.(u, intent);
+    if (intent.kind === "chatter" || intent.kind === "talent") {
+      console.log(`[gm:${intent.kind}] ${u.name}: ${u.text}`);
       return;
     }
-    if (!this.enabled) {
-      console.log(`[gm:disabled] ${u.name}: ${u.text}`);
+    if (this.mock) {
+      this.mockRound(u);
       return;
     }
     this.pending.push(u);

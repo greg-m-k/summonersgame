@@ -79,7 +79,7 @@ class ClaudeStream extends llm.LLMStream {
         fallbacks: "default",
         output_config: { effort: this.owner.opts.effort },
         ...(this.owner.noThinking ? { thinking: { type: "between_tools" as const } } : {}),
-        system: system ? [{ type: "text", text: system, cache_control: { type: "ephemeral" } }] : undefined,
+        system: systemBlocks(system),
         messages,
       },
       { signal: this.abortController.signal },
@@ -110,6 +110,20 @@ class ClaudeStream extends llm.LLMStream {
 
 type Msg = Anthropic.Beta.BetaMessageParam;
 
+/** Turns the demon carries into each call; older ones are dropped (the world summary is in the system prompt anyway). */
+const MAX_HISTORY = 16;
+
+/** Marks where the persona (static, cached) ends and the live world summary (changes every few seconds) begins. */
+export const LIVE_MARK = "\n---LIVE---\n";
+
+function systemBlocks(system: string): Anthropic.Beta.BetaTextBlockParam[] | undefined {
+  if (!system) return undefined;
+  const [persona, live] = system.split(LIVE_MARK);
+  const blocks: Anthropic.Beta.BetaTextBlockParam[] = [{ type: "text", text: persona!, cache_control: { type: "ephemeral" } }];
+  if (live?.trim()) blocks.push({ type: "text", text: live });
+  return blocks;
+}
+
 /** Flatten the agent's chat context into an Anthropic system string plus alternating messages. */
 export function toAnthropic(chatCtx: llm.ChatContext): { system: string; messages: Msg[] } {
   const system: string[] = [];
@@ -135,6 +149,8 @@ export function toAnthropic(chatCtx: llm.ChatContext): { system: string; message
       });
     }
   }
+  while (messages.length > MAX_HISTORY) messages.shift();
+  while (messages.length && messages[0]!.role !== "user") messages.shift();
   if (messages.length === 0 || messages[0]!.role !== "user") {
     messages.unshift({ role: "user", content: "(The player has just arrived in the dream.)" });
   }

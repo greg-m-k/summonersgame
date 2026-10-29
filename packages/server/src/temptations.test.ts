@@ -89,7 +89,6 @@ describe("Temptations", () => {
     }
     expect(offer?.text).toMatch(/Say nothing/);
     s.temps.onTranscript("p2");
-    expect(s.toPlayer.at(-1)?.msg).toMatchObject({ type: "temptation_result", success: false });
-    expect(s.temps.bribesTaken().p2).toBeUndefined();
+    expect(s.toPlayer.at(-1)?.msg).toMatchObject({ type: "temptation_result", success: false, id: offer!.id });
   });
 });

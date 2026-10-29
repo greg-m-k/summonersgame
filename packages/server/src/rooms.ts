@@ -5,6 +5,7 @@ import {
   type DemonMessage,
   MATCH_OVER_MS,
   SERVICES,
+  TALENT_BY_ID,
   TEAM_INFO,
   TOPIC_COST,
   TOPIC_DEMON,
@@ -102,7 +103,18 @@ export class GameRoom {
       falKey: env.FAL_KEY,
       onUsage: (entity) => this.recordUsage({ kind: "image", images: 1, playerId: entity.ownerId, ts: Date.now() }),
     });
-    this.gm = new GmEngine(this.world, { onUsage: (u) => this.recordGm(u), onRound: (round) => this.log.add("gm_round", round) });
+    this.gm = new GmEngine(this.world, {
+      onUsage: (u) => this.recordGm(u),
+      onRound: (round) => this.log.add("gm_round", round),
+      onIntent: (u, intent) => {
+        this.log.add("intent", { playerId: u.playerId, name: u.name, text: u.text, ...intent });
+        if (intent.kind !== "talent" || !intent.talentId) return;
+        // Talents by voice: "take sharp teeth" never needs the game master.
+        const why = this.world.chooseTalent(u.playerId, intent.talentId);
+        const talent = TALENT_BY_ID[intent.talentId]?.name ?? intent.talentId;
+        this.world.narrate(why ? `${u.name} reaches for ${talent}, but ${why}.` : `${u.name} takes ${talent}.`);
+      },
+    });
     this.mic = new MicController(this.world, {
       setDemonHearsPlayer: (playerId, hears) => this.setDemonHears(playerId, hears),
     });

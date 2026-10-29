@@ -65,7 +65,8 @@ for short matches). Against production: `GAME_SERVER_URL=https://games.greg.kitc
   `packages/server/src/world/state.ts`.
 - Talents: `packages/shared/src/talents.ts`; effects applied in `state.ts` (`summon`, `attack`, `regrow`).
 - Bribes: `packages/server/src/temptations.ts`.
-- Game master prompt and tools: `packages/server/src/gm/`.
+- Game master prompt and tools: `packages/server/src/gm/`; the Haiku router that reads every line first is `gm/router.ts`
+  (chatter never reaches Opus; talent picks by voice are applied in `rooms.ts` from the router's intent).
 - Demon persona and voice: `packages/server/src/personas.ts` (Cartesia voice ids), `packages/agents/src/meta.ts`.
 - Audio routing (who hears whom): `packages/web/src/room/useSubscriptions.ts`, `RoomMicButton.tsx`,
   `packages/server/src/micTime.ts`.
