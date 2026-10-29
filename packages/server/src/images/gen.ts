@@ -46,10 +46,17 @@ export class ImageService {
   }
 
   private pending = new Set<string>();
+  /** Same prompt, same picture: hearts every match, repeated summons. */
+  private byPrompt = new Map<string, string>();
 
   /** Fire-and-forget: renders the entity's picture and reports the proxied URL when ready. One render per entity at a time. */
   request(entity: EntitySpec): void {
     if (this.pending.has(entity.id)) return;
+    const cachedUrl = this.byPrompt.get(entity.imagePrompt);
+    if (cachedUrl && this.cache.has(cachedUrl.slice("/api/img/".length))) {
+      this.onImage(entity.id, cachedUrl);
+      return;
+    }
     this.pending.add(entity.id);
     const job = this.mode === "fal" ? () => this.renderFal(entity) : () => this.renderMock(entity);
     this.enqueue(async () => {
@@ -59,6 +66,7 @@ export class ImageService {
         if (this.mode === "fal") this.onUsage?.(entity);
         const id = randomUUID().replace(/-/g, "").slice(0, 16);
         this.store(id, img);
+        this.byPrompt.set(entity.imagePrompt, `/api/img/${id}`);
         this.onImage(entity.id, `/api/img/${id}`);
       } catch (err) {
         this.pending.delete(entity.id);

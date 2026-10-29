@@ -1,6 +1,6 @@
 import { Billboard, Html, Sparkles, useTexture } from "@react-three/drei";
 import { useFrame } from "@react-three/fiber";
-import { Suspense, useMemo, useRef } from "react";
+import { type ReactNode, Suspense, useMemo, useRef } from "react";
 import { Color, DoubleSide, type Group, ShaderMaterial, type Texture, Vector2 } from "three";
 import { type EntitySpec, type Fx, TEAM_INFO, teamOfOwner } from "@summoners/shared";
 import { withBase } from "../api.ts";
@@ -176,7 +176,15 @@ export function EntitySprite({ entity, diedAt }: { entity: EntitySpec; diedAt?: 
   return (
     <group ref={group} position={[entity.position.x, size * 0.5, entity.position.z]}>
       {entity.heart ? (
-        <Heart entity={entity} />
+        <Heart entity={entity}>
+          {team && (
+            <Billboard>
+              <Suspense fallback={null}>
+                <Sprite url={`${import.meta.env.BASE_URL}hearts/${team}.jpg`} entity={entity} diedAt={diedAt} />
+              </Suspense>
+            </Billboard>
+          )}
+        </Heart>
       ) : (
         <Billboard>
           <group ref={inner}>
@@ -218,31 +226,39 @@ export function EntitySprite({ entity, diedAt }: { entity: EntitySpec; diedAt?: 
   );
 }
 
-/** A team's heart: a slow-beating crystal in the team colour. No picture, it is not a creature. */
-function Heart({ entity }: { entity: EntitySpec }) {
-  const mesh = useRef<Group>(null);
-  const r = entity.size * 0.45;
+/**
+ * A team's heart: beats faster as it weakens. The painted heart (children) replaces the crystal as
+ * soon as its picture arrives; the glow ring on the ground stays either way.
+ */
+function Heart({ entity, children }: { entity: EntitySpec; children?: ReactNode }) {
+  const beatGroup = useRef<Group>(null);
+  const crystal = useRef<Group>(null);
+  const r = entity.size * 0.3;
   const hp = entity.hp / Math.max(1, entity.maxHp);
   useFrame((state) => {
-    const g = mesh.current;
-    if (!g) return;
     const t = state.clock.elapsedTime;
-    const beat = 1 + Math.max(0, Math.sin(t * (2.2 + (1 - hp) * 3))) ** 6 * 0.12;
-    g.scale.setScalar(beat);
-    g.rotation.y = t * 0.4;
+    const beat = 1 + Math.max(0, Math.sin(t * (2.2 + (1 - hp) * 3))) ** 6 * 0.1;
+    beatGroup.current?.scale.setScalar(beat);
+    if (crystal.current) crystal.current.rotation.y = t * 0.4;
   });
   return (
-    <group ref={mesh}>
-      <mesh>
-        <octahedronGeometry args={[r, 0]} />
-        <meshStandardMaterial color={entity.placeholderColor} emissive={entity.placeholderColor} emissiveIntensity={1.6} transparent opacity={0.92} />
-      </mesh>
-      <mesh rotation={[0.3, 0.8, 0]}>
-        <octahedronGeometry args={[r * 1.35, 1]} />
-        <meshBasicMaterial color={entity.placeholderColor} wireframe transparent opacity={0.35} />
-      </mesh>
+    <group>
+      <group ref={beatGroup}>
+        {children ?? (
+          <group ref={crystal}>
+            <mesh>
+              <octahedronGeometry args={[r, 0]} />
+              <meshStandardMaterial color={entity.placeholderColor} emissive={entity.placeholderColor} emissiveIntensity={1.6} transparent opacity={0.92} />
+            </mesh>
+            <mesh rotation={[0.3, 0.8, 0]}>
+              <octahedronGeometry args={[r * 1.35, 1]} />
+              <meshBasicMaterial color={entity.placeholderColor} wireframe transparent opacity={0.35} />
+            </mesh>
+          </group>
+        )}
+      </group>
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -entity.size * 0.5 + 0.02, 0]}>
-        <ringGeometry args={[r * 1.6, r * 1.9, 48]} />
+        <ringGeometry args={[entity.size * 0.45, entity.size * 0.55, 48]} />
         <meshBasicMaterial color={entity.placeholderColor} transparent opacity={0.5} />
       </mesh>
     </group>

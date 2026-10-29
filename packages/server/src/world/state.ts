@@ -211,8 +211,11 @@ export class World {
       id: heartId(team),
       ownerId: heartOwner(team),
       label: `Heart of ${info.name}`,
-      imagePrompt: `a giant floating crystal heart glowing ${info.name.toLowerCase()}`,
-      size: 3,
+      imagePrompt:
+        team === "ash"
+          ? "a colossal anatomical heart carved from molten amber and black iron, veins of fire, floating, dramatic orange rim light"
+          : "a colossal anatomical heart carved from clear glacial ice, frost veins, floating, dramatic cyan rim light",
+      size: 4,
       hp,
       maxHp: hp,
       attack: 0,

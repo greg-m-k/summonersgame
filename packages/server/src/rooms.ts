@@ -116,6 +116,7 @@ export class GameRoom {
     if (!this.budgetTripped && (ev.type === "summon" || (ev.type === "transform" && ev.entity.imageUrl === null))) {
       this.images.request(ev.entity);
     }
+    // Hearts are painted once and shipped with the client (packages/web/public/hearts); never billed.
     this.scheduleSnapshot();
   }
 
