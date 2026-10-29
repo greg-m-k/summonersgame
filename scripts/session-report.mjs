@@ -80,6 +80,9 @@ for (const e of events) {
       utteranceRows.push({ ts: e.ts, playerId: d.playerId, name: d.name, text: d.text });
       lines.push([e.ts, "said", `${d.name}: "${d.text}"`]);
       break;
+    case "intent":
+      lines.push([e.ts, "router", `${d.name}: ${d.kind}${d.talentId ? ` ${d.talentId}` : ""}${d.gist ? ` (${d.gist})` : ""}`]);
+      break;
     case "gm_round":
       rounds.push({ ts: e.ts, ...d });
       lines.push([e.ts, "gm", `round: ${d.utterances} lines, waited ${d.waitedMs} ms, Claude ${d.durationMs} ms, ${d.tools} tool calls`]);

@@ -31,7 +31,7 @@ Three roles, each the cheapest model that does the job, none talking to a provid
 | role | model | when | job |
 |---|---|---|---|
 | Router | Haiku 5.5 | every line a player says | classify: summon, transform, attack, warp, talent pick, or chatter. Chatter and questions to the demon stop here; a talent pick is applied directly ("take sharp teeth"); the rest goes to the game master. Under a second, a thousandth of a cent. |
-| Game master | Opus 5.5 | one round per batch of actionable lines, 7 s apart | make the words real with tools (stats, pictures, strikes, warps, creativity points) and narrate in the same reply; history cached |
+| Game master | Opus 5.5 | one round per batch of actionable lines, 4 s apart | make the words real with tools (stats, pictures, strikes, warps, creativity points) and narrate in the same reply; history cached |
 | Demon | Sonnet 5.5 | every turn the player takes, plus reactions to world events and bribes | talk back in character; preemptive generation on the interim transcript, persona cached, history capped at 16 turns |
 
 The combat engine, points, bribes, levels, and talents are plain code on the server tick; no model is in that loop.
@@ -167,7 +167,7 @@ npm run typecheck
 - If a demon's pipeline fails (bad or missing key), the feed shows `<persona> fails to manifest for <player>: <reason>`.
 - A demon that never registers (joined before the worker was up) or whose job ended (page refresh, worker
   restart) is dispatched again by the roster poll, up to three times per player, 15 s apart.
-- Latency and cost knobs: `GM_MODEL` (default `claude-opus-5-5`), `DEMON_MODEL` (default `claude-sonnet-5-5`), `GM_EFFORT` and `DEMON_EFFORT` (default `low`), `GM_ROUND_MS` (default 7000, the gap between game-master rounds).
+- Latency and cost knobs: `GM_MODEL` (default `claude-opus-5-5`), `DEMON_MODEL` (default `claude-sonnet-5-5`), `GM_EFFORT` and `DEMON_EFFORT` (default `low`), `GM_ROUND_MS` (default 4000, the gap between game-master rounds).
   Measured on Opus 5.5 at low effort: game-master round 2 to 7 s per model call, demon first token 1.6 to
   2.2 s. The agents worker logs `llm ... first token` and `tts ... first audio` per reply; the server logs
   `[gm] round` per round. Try `DEMON_MODEL=claude-sonnet-5-5` if the demons feel slow.

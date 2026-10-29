@@ -67,7 +67,8 @@ export class GmEngine {
     this.model = opts.model ?? process.env.GM_MODEL ?? "claude-opus-5-5";
     this.effort = opts.effort ?? effortFromEnv(process.env.GM_EFFORT, "low");
     // Rounds batch everything said since the last one; a longer gap means fewer, richer, cheaper rounds.
-    this.minIntervalMs = opts.minIntervalMs ?? (Number(process.env.GM_ROUND_MS) || 7000);
+    // 4 s now that the router keeps chatter out of the batches (was 7 s when every line cost a round).
+    this.minIntervalMs = opts.minIntervalMs ?? (Number(process.env.GM_ROUND_MS) || 4000);
     this.maxHistory = opts.maxHistoryMessages ?? 24;
     this.onUsage = opts.onUsage;
     this.onRound = opts.onRound;
