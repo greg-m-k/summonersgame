@@ -1,0 +1,73 @@
+{
+  "resolution": 60,
+  "scale": 2,
+  "pulse": {
+    "base": 2,
+    "weakBoost": 3,
+    "amount": 0.08,
+    "sharpness": 6
+  },
+  "float": {
+    "amplitude": 0.12,
+    "speed": 0.9
+  },
+  "rotateSpeed": 0.35,
+  "ash": {
+    "color": "#7a1a0c",
+    "emissive": "#ff5a1a",
+    "emissiveIntensity": 2.6,
+    "roughness": 0.45,
+    "metalness": 0.2,
+    "clearcoat": 0.6,
+    "clearcoatRoughness": 0.45,
+    "veins": {
+      "color": "#ffb347",
+      "density": 1.25,
+      "width": 3
+    },
+    "light": {
+      "color": "#ff6a00",
+      "intensity": 34,
+      "distance": 9
+    },
+    "bumpScale": 0.02
+  },
+  "tide": {
+    "color": "#8fd4ff",
+    "emissive": "#38b6ff",
+    "emissiveIntensity": 1.1,
+    "roughness": 0.26,
+    "metalness": 0,
+    "transmission": 0.8,
+    "ior": 1.35,
+    "thickness": 1.4,
+    "attenuationColor": "#1a6fa8",
+    "attenuationDistance": 1.2,
+    "clearcoat": 1,
+    "clearcoatRoughness": 0.08,
+    "veins": {
+      "color": "#dff6ff",
+      "density": 1.2,
+      "width": 2.2
+    },
+    "light": {
+      "color": "#4fc3f7",
+      "intensity": 32,
+      "distance": 9
+    },
+    "bumpScale": 0.055
+  },
+  "vessels": {
+    "count": 3,
+    "radius": 0.1
+  },
+  "ring": {
+    "opacity": 0.08,
+    "inner": 0.55,
+    "outer": 0.6
+  },
+  "shape": {
+    "lobe": 0.95,
+    "thickness": 0.85
+  }
+}

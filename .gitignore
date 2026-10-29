@@ -11,3 +11,4 @@ deploy/assets/
 .wrangler/
 packages/server/logs/
 reports/
+scripts/out/

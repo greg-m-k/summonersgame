@@ -1,4 +1,5 @@
 import { Route, Routes } from "react-router-dom";
+import { HeartsLab } from "./lab/HeartsLab.tsx";
 import { Lobby } from "./lobby/Lobby.tsx";
 import { RoomView } from "./room/RoomView.tsx";
 
@@ -7,6 +8,7 @@ export function App() {
     <Routes>
       <Route path="/" element={<Lobby />} />
       <Route path="/room/:code" element={<RoomView />} />
+      <Route path="/lab/hearts" element={<HeartsLab />} />
     </Routes>
   );
 }

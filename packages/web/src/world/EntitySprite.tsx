@@ -4,6 +4,7 @@ import { type ReactNode, Suspense, useMemo, useRef } from "react";
 import { Color, DoubleSide, type Group, ShaderMaterial, type Texture, Vector2 } from "three";
 import { type EntitySpec, type Fx, TEAM_INFO, teamOfOwner } from "@summoners/shared";
 import { withBase } from "../api.ts";
+import { Heart3D } from "./heart3d/Heart3D.tsx";
 import { useWorldStore } from "./useWorldStore.ts";
 
 const vert = /* glsl */ `
@@ -176,15 +177,11 @@ export function EntitySprite({ entity, diedAt }: { entity: EntitySpec; diedAt?: 
   return (
     <group ref={group} position={[entity.position.x, size * 0.5, entity.position.z]}>
       {entity.heart ? (
-        <Heart entity={entity}>
-          {team && (
-            <Billboard>
-              <Suspense fallback={null}>
-                <Sprite url={`${import.meta.env.BASE_URL}hearts/${team}.jpg`} entity={entity} diedAt={diedAt} />
-              </Suspense>
-            </Billboard>
-          )}
-        </Heart>
+        team ? (
+          <Heart3D entity={entity} team={team} />
+        ) : (
+          <Heart entity={entity} />
+        )
       ) : (
         <Billboard>
           <group ref={inner}>
@@ -227,8 +224,8 @@ export function EntitySprite({ entity, diedAt }: { entity: EntitySpec; diedAt?: 
 }
 
 /**
- * A team's heart: beats faster as it weakens. The painted heart (children) replaces the crystal as
- * soon as its picture arrives; the glow ring on the ground stays either way.
+ * Crystal stand-in for a heart whose team is not known yet (snapshot still loading); Heart3D takes
+ * over as soon as the owner resolves to a team.
  */
 function Heart({ entity, children }: { entity: EntitySpec; children?: ReactNode }) {
   const beatGroup = useRef<Group>(null);

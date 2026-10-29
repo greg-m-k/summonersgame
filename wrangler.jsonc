@@ -41,7 +41,7 @@
   "triggers": { "crons": ["*/5 * * * *"] },
   "vars": {
     "PUBLIC_URL": "https://games.greg.kitchen/summoners",
-    "INSTANCE_GEN": "12",
+    "INSTANCE_GEN": "13",
     "HEART_HP": "1200"
   },
   "observability": { "enabled": true }

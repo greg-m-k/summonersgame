@@ -12,7 +12,7 @@ export function WorldCanvas() {
 
   return (
     <div className="world">
-      <Canvas camera={{ position: [0, 16, 30], fov: 48, near: 0.1, far: 400 }} dpr={[1, 1.5]} gl={{ antialias: true }}>
+      <Canvas camera={{ position: [0, 16, 30], fov: 48, near: 0.1, far: 2000 }} dpr={[1, 1.5]} gl={{ antialias: true }}>
         <color attach="background" args={[env.skyBottom]} />
         <fogExp2 attach="fog" args={[env.fogColor, env.fogDensity * 0.6]} />
         <ambientLight color={env.ambient} intensity={1.1} />
