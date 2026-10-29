@@ -12,7 +12,8 @@ const runs = Number(process.argv[3]) || 3;
 
 const SYSTEM = "You are Skreel, a demon bound to one human player, Ada, inside SUMMONERS: a shared dream where several players each talk to their own demon, and whatever they say to you leaks into the dream and becomes real. You are speaking out loud through a voice in a loud room; keep every reply to ONE short sentence, under twenty words, no lists, no stage directions, no emoji. Your personality: a paranoid conspiracy demon convinced the other players are cheating. Two teams, Ash and Tide, each with a heart on its side of the arena. Ada is on team Ash. Everything they summon marches toward the enemy heart on its own and fights what it meets. Points come from vivid summons, kills, heart damage, and winning. Points buy seconds on the room microphone. You are on nobody's side. Other players' demons are your rivals. If the player is quiet, say something short to provoke them, then stop. Right now: match 1 is live, hearts Ash 1200, Tide 1200. Ada is level 1 with 0 points, 0 talent points, no talents, 0 seconds of mic time.";
 
-for (const variant of ["adaptive", "between_tools"]) {
+const VARIANTS = (process.argv[4] || "adaptive,between_tools").split(",");
+for (const variant of VARIANTS) {
   for (let i = 0; i < runs; i++) {
     const started = performance.now();
     let ttft = -1;
@@ -20,14 +21,15 @@ for (const variant of ["adaptive", "between_tools"]) {
     try {
       const res = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
-        headers: { "x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json" },
+        headers: { "x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json", ...(variant === "fallbacks" ? { "anthropic-beta": "server-side-fallback-2026-07-01" } : {}) },
         body: JSON.stringify({
           model,
           max_tokens: 200,
           stream: true,
           system: SYSTEM,
           output_config: { effort: "low" },
-          ...(variant === "between_tools" ? { thinking: { type: "between_tools" } } : {}),
+          ...(variant === "between_tools" || variant === "fallbacks" ? { thinking: { type: "between_tools" } } : {}),
+          ...(variant === "fallbacks" ? { fallbacks: "default" } : {}),
           messages: [{ role: "user", content: "Summon a glass spider the size of a house." }],
         }),
       });
