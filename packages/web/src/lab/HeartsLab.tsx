@@ -79,19 +79,19 @@ export function HeartsLab() {
   }
   return (
     <div className="world" style={{ background: "#0b0616" }}>
-      <Canvas camera={{ position: [0, 3.2, 11], fov: 40 }} shadows gl={{ antialias: true }}>
+      <Canvas camera={{ position: [0, 4, 20], fov: 40 }} shadows gl={{ antialias: true }}>
         <color attach="background" args={["#120826"]} />
         <fogExp2 attach="fog" args={["#2a1246", 0.03]} />
         <ambientLight intensity={0.35} color="#8a5cff" />
         <directionalLight position={[6, 10, 4]} intensity={1.6} color="#ffe9d6" castShadow />
         <directionalLight position={[-6, 4, -4]} intensity={0.6} color="#6fb6ff" />
         <Stars radius={60} depth={30} count={1500} factor={3} fade />
-        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -2.05, 0]} receiveShadow>
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -2.6, 0]} receiveShadow>
           <circleGeometry args={[14, 64]} />
           <meshStandardMaterial color="#2a1246" roughness={0.9} />
         </mesh>
         {hearts.map((h, i) => (
-          <group key={h.team} position={[i === 0 ? -3.2 : 3.2, 0, 0]}>
+          <group key={h.team} position={[i === 0 ? -5.5 : 5.5, 0.5, 0]}>
             <Heart3D entity={h.entity} team={h.team} lookOverride={look} />
           </group>
         ))}

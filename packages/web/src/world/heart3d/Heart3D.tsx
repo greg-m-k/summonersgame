@@ -216,11 +216,12 @@ export function Heart3D({ entity, team, lookOverride }: { entity: EntitySpec; te
     [L.vessels.count, L.vessels.radius],
   );
 
+  const size = entity.size * L.scale * 0.55;
   useFrame((state) => {
     const t = state.clock.elapsedTime;
     const rate = L.pulse.base + (1 - hp) * L.pulse.weakBoost;
     const pulse = Math.max(0, Math.sin(t * rate)) ** L.pulse.sharpness;
-    beat.current?.scale.setScalar(1 + pulse * L.pulse.amount);
+    beat.current?.scale.setScalar(size * (1 + pulse * L.pulse.amount));
     if (group.current) {
       group.current.position.y = Math.sin(t * L.float.speed) * L.float.amplitude;
       group.current.rotation.y = L.pose ?? t * L.rotateSpeed;
@@ -229,12 +230,11 @@ export function Heart3D({ entity, team, lookOverride }: { entity: EntitySpec; te
     material.emissiveIntensity = style.emissiveIntensity * (0.75 + pulse * 0.5);
   });
 
-  const s = entity.size * L.scale * 0.55;
   // Additive and pre-scaled: a faint team glow on the floor whatever the tone mapping does to alpha.
   const ringColor = useMemo(() => new Color(TEAM_INFO[team].color).multiplyScalar(L.ring.opacity), [team, L.ring.opacity]);
   return (
     <group ref={group}>
-      <group ref={beat} scale={s}>
+      <group ref={beat} scale={size}>
         <mesh geometry={geometry} material={material} castShadow />
         {vessels.map((g, i) => (
           <mesh key={i} geometry={g} material={vesselMaterial} />
