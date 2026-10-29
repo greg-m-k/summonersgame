@@ -42,6 +42,8 @@ const EMPTY_ROOM_TTL_MS = 5 * 60_000;
 /** How long a dispatched demon gets to register before it is dispatched again. */
 const DEMON_GRACE_MS = 15_000;
 const MAX_REDISPATCHES = 3;
+/** After the cap, one more attempt this often. */
+const REDISPATCH_RETRY_MS = 2 * 60_000;
 const COST_BROADCAST_DEBOUNCE_MS = 2000;
 const COST_LOG_MS = 60_000;
 
@@ -180,8 +182,11 @@ export class GameRoom {
    */
   private async ensureDemon(identity: string, rec: PlayerRecord, agents: Set<string>, now: number): Promise<void> {
     const p = this.world.player(identity);
-    if (!p || now - rec.dispatchedAt < DEMON_GRACE_MS || rec.redispatches >= MAX_REDISPATCHES) return;
+    if (!p || now - rec.dispatchedAt < DEMON_GRACE_MS) return;
     if (p.demonIdentity && agents.has(p.demonIdentity)) return;
+    // Past the cap, keep trying once every couple of minutes: a provider outage or an unpaid
+    // account (Cartesia 402) gets fixed on the vendor's side, and the player should not have to rejoin.
+    if (rec.redispatches >= MAX_REDISPATCHES && now - rec.dispatchedAt < REDISPATCH_RETRY_MS) return;
     rec.redispatches++;
     console.warn(
       `[room ${this.name}] ${p.persona} ${p.demonIdentity ? "left" : "never arrived"} for ${p.name}; dispatching again (${rec.redispatches}/${MAX_REDISPATCHES})`,
