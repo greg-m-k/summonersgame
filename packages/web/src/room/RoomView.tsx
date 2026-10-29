@@ -26,6 +26,22 @@ export function RoomView() {
 
   if (!session) return null;
 
+  // A deployed server still pointing at the local LiveKit container: nothing would ever connect.
+  const localLivekit = /^wss?:\/\/(localhost|127\.0\.0\.1)/.test(session.url);
+  const localPage = /^(localhost|127\.0\.0\.1)$/.test(window.location.hostname);
+  if (localLivekit && !localPage) {
+    return (
+      <div className="lobby">
+        <h1>SUMMONERS</h1>
+        <p className="error">This server has no LiveKit Cloud project yet.</p>
+        <p className="hint">
+          It handed out <code>{session.url}</code>, which only works on the machine running the local Docker LiveKit.
+          Set LIVEKIT_URL, LIVEKIT_API_KEY and LIVEKIT_API_SECRET to a LiveKit Cloud project and redeploy.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <LiveKitRoom
       serverUrl={session.url}
