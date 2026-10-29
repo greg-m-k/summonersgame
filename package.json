@@ -1,0 +1,30 @@
+{
+  "name": "summoners",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -n server,agents,web -c blue,magenta,green \"npm run dev -w packages/server\" \"npm run dev -w packages/agents\" \"npm run dev -w packages/web\"",
+    "dev:server": "npm run dev -w packages/server",
+    "dev:agents": "npm run dev -w packages/agents",
+    "dev:web": "npm run dev -w packages/web",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "harness": "npm run harness -w packages/harness --",
+    "build:web": "npm run build -w packages/web",
+    "typecheck:deploy": "tsc --noEmit -p deploy/tsconfig.json",
+    "deploy": "npm run build:web && wrangler deploy",
+    "deploy:secrets": "node scripts/secrets-json.mjs | wrangler secret bulk"
+  },
+  "devDependencies": {
+    "@cloudflare/containers": "^0.3.7",
+    "@cloudflare/workers-types": "^5.20261029.1",
+    "@types/node": "^24.3.0",
+    "concurrently": "^9.2.0",
+    "typescript": "^5.9.0",
+    "vitest": "^5.0.0",
+    "wrangler": "^4.155.0"
+  }
+}

@@ -1,0 +1,12 @@
+node_modules
+**/node_modules
+.git
+.env
+.env.*
+!.env.example
+packages/web/dist
+packages/harness/runs
+packages/harness/fixtures
+deploy/assets
+*.log
+.wrangler

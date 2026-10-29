@@ -1,0 +1,25 @@
+{
+  "name": "@summoners/server",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.3.0",
+    "@fal-ai/client": "^1.10.0",
+    "@fastify/cors": "^11.0.0",
+    "@livekit/protocol": "^1.53.1",
+    "@summoners/shared": "*",
+    "fastify": "^5.4.0",
+    "livekit-server-sdk": "^2.19.0",
+    "zod": "^4.1.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.20.0"
+  }
+}

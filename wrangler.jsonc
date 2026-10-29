@@ -1,0 +1,44 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "summoners",
+  "main": "deploy/worker.ts",
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "account_id": "a5ac50eac3fc3bba71323b08817bd04e",
+  "routes": [{ "pattern": "games.greg.kitchen/summoners*", "zone_name": "greg.kitchen" }],
+  "assets": {
+    "directory": "deploy/assets",
+    "binding": "ASSETS",
+    "run_worker_first": true,
+    "not_found_handling": "none"
+  },
+  "containers": [
+    {
+      "class_name": "GameServer",
+      "image": "./deploy/server.Dockerfile",
+      "image_build_context": ".",
+      "max_instances": 1,
+      "instance_type": "basic"
+    },
+    {
+      "class_name": "DemonWorker",
+      "image": "./deploy/agents.Dockerfile",
+      "image_build_context": ".",
+      "max_instances": 1,
+      "instance_type": "standard-1"
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      { "name": "GAME_SERVER", "class_name": "GameServer" },
+      { "name": "DEMON_WORKER", "class_name": "DemonWorker" }
+    ]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["GameServer", "DemonWorker"] }],
+  "triggers": { "crons": ["*/5 * * * *"] },
+  "vars": {
+    "PUBLIC_URL": "https://games.greg.kitchen/summoners",
+    "HEART_HP": "1200"
+  },
+  "observability": { "enabled": true }
+}
