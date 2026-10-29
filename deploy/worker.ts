@@ -163,7 +163,9 @@ export default {
     const asset = await env.ASSETS.fetch(request);
     if (asset.status !== 404) return asset;
     if (request.method === "GET" && (request.headers.get("accept") ?? "").includes("text/html")) {
-      return env.ASSETS.fetch(new Request(`${url.origin}${BASE}/index.html`, request));
+      // Ask for the directory, not index.html: assets answer index.html with a redirect to it, which
+      // would bounce every deep link (a room refresh, the hearts lab) back to the lobby.
+      return env.ASSETS.fetch(new Request(`${url.origin}${BASE}/`, { headers: request.headers }));
     }
     return asset;
   },
