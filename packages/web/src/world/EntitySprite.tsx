@@ -5,6 +5,8 @@ import { Color, DoubleSide, type Group, ShaderMaterial, type Texture, Vector2 } 
 import { type EntitySpec, type Fx, TEAM_INFO, teamOfOwner } from "@summoners/shared";
 import { withBase } from "../api.ts";
 import { Heart3D } from "./heart3d/Heart3D.tsx";
+import { Minion3D } from "./Minion3D.tsx";
+import { Tower3D } from "./Tower3D.tsx";
 import { useWorldStore } from "./useWorldStore.ts";
 
 const vert = /* glsl */ `
@@ -182,6 +184,12 @@ export function EntitySprite({ entity, diedAt }: { entity: EntitySpec; diedAt?: 
         ) : (
           <Heart entity={entity} />
         )
+      ) : entity.kind === "tower" && team ? (
+        <group position-y={-size * 0.5}>
+          <Tower3D entity={entity} team={team} />
+        </group>
+      ) : entity.kind === "minion" && team ? (
+        <Minion3D entity={entity} team={team} />
       ) : (
         <Billboard>
           <group ref={inner}>
@@ -196,12 +204,14 @@ export function EntitySprite({ entity, diedAt }: { entity: EntitySpec; diedAt?: 
         </Billboard>
       )}
       {!diedAt && (
-        <Html position={[0, size * 0.62, 0]} center zIndexRange={[20, 0]} style={{ pointerEvents: "none" }}>
-          <div className="label">
-            <div className="label-name" style={{ color: teamColor }}>
-              {entity.label}
-              {entity.kills ? <span className="label-stars"> {"★".repeat(Math.min(3, entity.kills))}</span> : null}
-            </div>
+        <Html position={[0, entity.kind === "tower" ? size * 1.1 : size * 0.62, 0]} center zIndexRange={[20, 0]} style={{ pointerEvents: "none" }}>
+          <div className={entity.kind === "minion" ? "label label-small" : "label"}>
+            {entity.kind !== "minion" && (
+              <div className="label-name" style={{ color: teamColor }}>
+                {entity.label}
+                {entity.kills ? <span className="label-stars"> {"★".repeat(Math.min(3, entity.kills))}</span> : null}
+              </div>
+            )}
             <div className="label-hp">
               <i style={{ width: `${hp * 100}%`, background: hp > 0.5 ? "#7cf2a0" : hp > 0.2 ? "#ffd166" : "#ff5d5d" }} />
             </div>

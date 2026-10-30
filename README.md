@@ -39,14 +39,20 @@ The combat engine, points, bribes, levels, and talents are plain code on the ser
 ## The game
 
 Two teams, Ash and Tide. Players are dealt to the smaller team as they join. Each team has a heart, a
-crystal on its side of the arena. Everything you summon belongs to your team, marches toward the enemy
-heart on its own, and fights whatever it meets on the way (nearest enemy within 7 m, else the heart).
-Hits land about once a second for a quarter of the attacker's attack stat. When a heart dies the match
-ends: winners get 8 points, a result screen shows scores and every bribe each player took, and 15 s
-later a fresh match starts with a clean arena.
+beating 3D organ on its side of the arena. Three lanes (north, mid, south) run between the hearts
+through a field of rocks, pillars, crystals, ruins and pools, laid out fresh from a seed every match.
+Each team has a tower on every lane (300 hp, shoots anything hostile within 5.5 m, minions first), and
+every 30 s a wave of minions marches down every lane for both sides, a brute leading every third wave,
+siege minions once the lane's enemy tower is down. A heart with no towers left takes double damage.
+Everything you summon belongs to your team, marches toward the enemy heart on its own, walks round the
+rocks (pools slow it), and fights whatever it meets on the way: enemy creatures, minions, towers
+(nearest enemy within 7 m, else the heart). Hits land about once a second for a quarter of the
+attacker's attack stat. A lone summon under a tower dies; push in behind a wave or bring friends. When
+a heart dies the match ends: winners get 8 points, a result screen shows scores and every bribe each
+player took, and 15 s later a fresh match starts with a clean arena and a new field.
 
-Points buy mic time: 2 for a kill (3 if the victim was bigger), 1 per 100 damage to the enemy heart, 1 to
-3 from the game master for a vivid summon, 8 for winning. Hold the room-mic button to talk to the other
+Points buy mic time: 2 for a kill (3 if the victim was bigger), 3 for toppling a tower, 1 per 3 minions
+cleared, 1 per 250 damage to the enemy heart, 1 to 3 from the game master for a vivid summon, 8 for winning. Hold the room-mic button to talk to the other
 humans: coordinate with your team, bluff the enemy. Your demon stops listening while you do.
 
 Demons are on nobody's side. Every minute or so yours whispers a private deal that pays mic seconds:
@@ -67,6 +73,11 @@ at 1 hp), Dream (Silver Tongue +2 mic seconds per point, Echo brings a 40% copy 
 creature 10% stronger, shown as stars on its label.
 
 `HEART_HP` (default 1200) sets heart hit points; `HEART_HP=400` makes short matches for testing.
+
+Hearts, towers, minions and the field are procedural 3D (no image calls). Their looks live in
+`packages/web/src/world/heart3d/heartLook.json` and `packages/web/src/world/arenaLook.json`, tuned by an AI art
+director: `node scripts/judge-look.mjs hearts 4` (or `arena`) renders `/lab/hearts` or `/lab/arena` headless, has
+Opus score the frames against a rubric, applies the parameter patch it proposes, and keeps the best round.
 
 ## Setup
 

@@ -2,25 +2,44 @@ import { randomUUID } from "node:crypto";
 import {
   AGGRO_RADIUS,
   ATTACK_COOLDOWN_S,
+  FIRST_WAVE_MS,
   HEART_HP,
   HEART_RADIUS,
   HIT_FRACTION,
   LEVEL_UP_MIC_SECONDS,
   MAX_ENTITIES,
+  MINION_AGGRO_RADIUS,
+  MINION_KILLS_PER_POINT,
+  MINIONS_PER_LANE,
   SECONDS_PER_POINT,
   SPAWN_RADIUS,
   TEAM_IDS,
   TEAM_INFO,
+  TOWER_ATTACK,
+  TOWER_COOLDOWN_S,
+  TOWER_HP,
+  TOWER_POINTS,
+  TOWER_RANGE,
+  WAVE_INTERVAL_MS,
   XP_PER_POINT,
+  type Lane,
   type TeamId,
+  type Terrain,
   applyEvent,
   emptyWorld,
+  generateTerrain,
+  groundFactor,
   heartId,
   heartOwner,
+  isStructure,
+  isSummon,
   levelForXp,
   otherTeam,
+  roomSeed,
+  stepAround,
   talentBlocker,
   teamOfOwner,
+  towerSpot,
   type EntitySpec,
   type Environment,
   type PlayerState,
@@ -57,13 +76,20 @@ export class World {
   private cooldownUntil = new Map<string, number>();
   private heartDamage = new Map<string, number>();
   private healAcc = new Map<string, number>();
+  private minionKills = new Map<string, number>();
+  /** Which way round a rock each mover is going, and how long since it last got closer to its goal. */
+  private avoidSide = new Map<string, -1 | 0 | 1>();
+  private progress = new Map<string, { best: number; since: number }>();
+  private nextWaveAt = 0;
   private readonly heartHp: number;
+  private readonly room: string;
 
   constructor(
     room: string,
     private now: () => number = () => Date.now(),
     opts: { heartHp?: number } = {},
   ) {
+    this.room = room;
     this.heartHp = opts.heartHp ?? HEART_HP;
     this.state = emptyWorld(room);
     this.startMatch(1);
@@ -193,14 +219,107 @@ export class World {
   startMatch(number = this.state.match.number + 1): void {
     const counts = this.teamCounts();
     const hearts = TEAM_IDS.map((team) => this.makeHeart(team, counts));
+    const terrain = generateTerrain(roomSeed(this.room, number));
+    const towers = terrain.lanes.flatMap((lane) => TEAM_IDS.map((team) => this.makeTower(team, lane)));
     this.cooldownUntil.clear();
     this.heartDamage.clear();
     this.healAcc.clear();
+    this.minionKills.clear();
+    this.nextWaveAt = this.now() + FIRST_WAVE_MS;
     this.emit({
       type: "match_started",
       match: { number, phase: "live", startedAt: this.now(), endedAt: null, winner: null },
       hearts,
+      towers,
+      terrain,
     });
+  }
+
+  get terrain(): Terrain {
+    return this.state.terrain;
+  }
+
+  /** A lane's guardian: stands a third of the way out from its heart and shoots whatever comes. */
+  private makeTower(team: TeamId, lane: Lane): EntitySpec {
+    const info = TEAM_INFO[team];
+    const spot = towerSpot(lane, team);
+    return {
+      id: `tower-${team}-${lane.id}`,
+      ownerId: heartOwner(team),
+      label: `${info.name} ${lane.id} tower`,
+      imagePrompt: "",
+      size: 3,
+      hp: TOWER_HP,
+      maxHp: TOWER_HP,
+      attack: TOWER_ATTACK,
+      speed: 0,
+      fx: "none",
+      idleAnim: "pulse",
+      moveStyle: "walk",
+      placeholderColor: info.color,
+      imageUrl: null,
+      position: { x: spot.x, y: 0, z: spot.z },
+      target: null,
+      targetEntityId: null,
+      bornAt: this.now(),
+      heart: false,
+      kind: "tower",
+      lane: lane.id,
+      range: TOWER_RANGE,
+      lastHitBy: null,
+    };
+  }
+
+  /** A lane minion: small, dumb, walks its lane and picks fights with whatever is close. */
+  private makeMinion(team: TeamId, lane: Lane, slot: number, wave: number): EntitySpec {
+    const info = TEAM_INFO[team];
+    const pts = team === "ash" ? lane.points : [...lane.points].reverse();
+    const start = pts[0]!;
+    // Every third wave brings a brute; minions grow a little each wave so the field never settles,
+    // and once the enemy tower on this lane is down the lane sends siege minions that hit harder.
+    const brute = wave % 3 === 0 && slot === 0;
+    const siege = !this.state.entities[`tower-${otherTeam(team)}-${lane.id}`];
+    const grow = (1 + Math.min(wave, 12) * 0.08) * (siege ? 1.6 : 1);
+    const hp = Math.round((brute ? 160 : 55) * grow);
+    const spread = (slot - (MINIONS_PER_LANE - 1) / 2) * 0.9;
+    return {
+      id: `m-${randomUUID().slice(0, 6)}`,
+      ownerId: heartOwner(team),
+      label: brute ? `${info.name} brute` : siege ? `${info.name} siege minion` : `${info.name} minion`,
+      imagePrompt: "",
+      size: brute ? 1.4 : 0.8,
+      hp,
+      maxHp: hp,
+      attack: Math.round((brute ? 32 : 14) * grow),
+      speed: brute ? 1.8 : 2.4,
+      fx: "none",
+      idleAnim: "bob",
+      moveStyle: "walk",
+      placeholderColor: info.color,
+      imageUrl: null,
+      position: { x: round(start.x + (team === "ash" ? -1 : 1) * 1.2), y: 0, z: round(start.z + spread) },
+      target: null,
+      targetEntityId: null,
+      bornAt: this.now(),
+      heart: false,
+      kind: "minion",
+      lane: lane.id,
+      waypoint: 1,
+      lastHitBy: null,
+      kills: 0,
+    };
+  }
+
+  /** Both teams' minions march at once, one event for the lot. */
+  private spawnWave(): void {
+    const number = this.state.wave + 1;
+    const minions: EntitySpec[] = [];
+    for (const lane of this.state.terrain.lanes) {
+      for (const team of TEAM_IDS) {
+        for (let slot = 0; slot < MINIONS_PER_LANE; slot++) minions.push(this.makeMinion(team, lane, slot, number));
+      }
+    }
+    this.emit({ type: "wave", number, minions });
   }
 
   private makeHeart(team: TeamId, counts: Record<TeamId, number>): EntitySpec {
@@ -284,17 +403,19 @@ export class World {
   private spawn(input: SummonInput): EntitySpec {
     const owner = this.state.players[input.ownerId];
     const team = owner?.team ?? "ash";
-    const creatures = Object.values(this.state.entities).filter((e) => !e.heart);
+    const creatures = Object.values(this.state.entities).filter(isSummon);
     if (creatures.length >= MAX_ENTITIES) {
       const oldest = creatures.reduce((a, b) => (a.bornAt <= b.bornAt ? a : b));
       this.destroy(oldest.id, "faded from the dream");
     }
+    const raw = spawnPosition(team, creatures.length);
+    const clear = stepAround(this.state.terrain, raw, raw, 0, input.size);
     const entity: EntitySpec = {
       ...input,
       id: `e-${randomUUID().slice(0, 6)}`,
       imageUrl: null,
       maxHp: input.hp,
-      position: spawnPosition(team, creatures.length),
+      position: { x: round(clear.x), y: 0, z: round(clear.z) },
       target: null,
       targetEntityId: null,
       bornAt: this.now(),
@@ -326,6 +447,8 @@ export class World {
     let dmg = Math.max(0, Math.round(damage));
     if (mine.has("bloodlust") && attacker.hp < attacker.maxHp / 2) dmg = Math.round(dmg * 1.3);
     if (mine.has("overkill") && target.heart) dmg = Math.round(dmg * 1.6);
+    // A heart with no towers left is wide open: hits land double, so a won field ends the match.
+    if (target.heart && !Object.values(this.state.entities).some((t) => t.kind === "tower" && t.ownerId === target.ownerId)) dmg *= 2;
     let targetHp = Math.max(0, target.hp - dmg);
     let spared = false;
     if (targetHp === 0 && !target.heart && !target.spared && theirs.has("second_wind")) {
@@ -353,6 +476,8 @@ export class World {
     this.emit({ type: "destroy", entityId, cause });
     this.cooldownUntil.delete(entityId);
     this.healAcc.delete(entityId);
+    this.avoidSide.delete(entityId);
+    this.progress.delete(entityId);
     if (e.heart) {
       const team = this.teamOf(e.ownerId);
       if (team) this.hooks.onHeartDown?.(otherTeam(team));
@@ -371,18 +496,29 @@ export class World {
     if (points > 0) this.awardPoints(attacker.ownerId, points, `wounding the ${target.label}`);
   }
 
+  /** Kills pay the killer's owner: creatures 2-3, a tower 3, minions a point every few. */
   private creditKill(attacker: EntitySpec, victim: EntitySpec): void {
     if (victim.heart || !this.state.players[attacker.ownerId]) return;
     const at = this.teamOf(attacker.ownerId);
     const vt = this.teamOf(victim.ownerId);
     if (!at || !vt || at === vt) return;
+    if (victim.kind === "tower") {
+      this.awardPoints(attacker.ownerId, TOWER_POINTS, `toppling the ${victim.label}`);
+      return;
+    }
+    if (victim.kind === "minion") {
+      const n = (this.minionKills.get(attacker.ownerId) ?? 0) + 1;
+      this.minionKills.set(attacker.ownerId, n % MINION_KILLS_PER_POINT);
+      if (n >= MINION_KILLS_PER_POINT) this.awardPoints(attacker.ownerId, 1, "clearing minions");
+      return;
+    }
     this.awardPoints(attacker.ownerId, 2 + (victim.size > attacker.size ? 1 : 0), `killing ${victim.label}`);
   }
 
   /** A kill makes the killer tougher: more attack, more max hp, and the hp to go with it. */
   private veteran(attackerId: string): void {
     const a = this.state.entities[attackerId];
-    if (!a || a.heart) return;
+    if (!a || !isSummon(a)) return;
     const kills = (a.kills ?? 0) + 1;
     const maxHp = Math.round(a.maxHp * (1 + VETERAN_GAIN));
     const entity: EntitySpec = {
@@ -438,38 +574,80 @@ export class World {
   // ---- the combat engine --------------------------------------------------------------------------
 
   /**
-   * Advance the dream by dt seconds: every creature keeps its target (or picks the nearest enemy in
-   * reach, else the enemy heart), walks toward it, swings when close and off cooldown, and heals when
-   * its owner has Regrowth and nothing is in reach. Returns a positions packet when something moved.
-   * Frozen while the result screen is up.
+   * Advance the dream by dt seconds. Minion waves march down the lanes on a timer. Every mover
+   * keeps its target (or picks the nearest enemy in reach; summons otherwise head for the enemy
+   * heart, minions for their next waypoint), walks around the rocks toward it, and swings when
+   * close and off cooldown. Towers stand and shoot. Regrowth heals the idle. Returns a positions
+   * packet when something moved. Frozen while the result screen is up.
    */
   step(dt: number): PositionsPacket | null {
     if (!this.live) return null;
     const now = this.now();
+    if (now >= this.nextWaveAt) {
+      this.nextWaveAt = now + WAVE_INTERVAL_MS;
+      this.spawnWave();
+    }
     const items: PositionsPacket["items"] = [];
+    const terrain = this.state.terrain;
 
     const entities = { ...this.state.entities };
     for (const e of Object.values(entities)) {
-      if (e.heart) continue;
+      if (isStructure(e)) continue;
       let target = e.targetEntityId ? entities[e.targetEntityId] : undefined;
-      if (!target) {
-        target = this.pickTarget(e, entities);
-        entities[e.id] = { ...e, targetEntityId: target?.id ?? null };
-        if (!target) continue;
+      // Marching on the heart is a default, not a grudge: anything that comes in reach on the way
+      // (a tower, a minion, an enemy creature) takes over as the target.
+      if (!target || target.heart) {
+        const picked = this.pickTarget(e, entities);
+        if (picked?.id !== target?.id) {
+          target = picked;
+          entities[e.id] = { ...e, targetEntityId: target?.id ?? null };
+        }
       }
       const cur = entities[e.id]!;
-      const dx = target.position.x - cur.position.x;
-      const dz = target.position.z - cur.position.z;
+      let goal: { x: number; z: number } | null = null;
+      let stop = 0;
+      if (target) {
+        goal = target.position;
+        stop = reach(cur, target);
+      } else if (cur.kind === "minion") {
+        const lane = terrain.lanes.find((l) => l.id === cur.lane);
+        const pts = lane ? (this.teamOf(cur.ownerId) === "ash" ? lane.points : [...lane.points].reverse()) : [];
+        const wp = pts[cur.waypoint ?? 1];
+        if (wp) {
+          goal = wp;
+          stop = 0.3;
+        }
+      }
+      if (!goal) continue;
+      const dx = goal.x - cur.position.x;
+      const dz = goal.z - cur.position.z;
       const dist = Math.hypot(dx, dz);
-      const stop = reach(cur, target);
-      if (dist <= stop || cur.speed <= 0) continue;
-      const stepLen = cur.moveStyle === "teleport" ? dist - stop : Math.min(cur.speed * dt, dist - stop);
-      const position: Vec3 = {
-        x: cur.position.x + (dx / dist) * stepLen,
-        y: 0,
-        z: cur.position.z + (dz / dist) * stepLen,
-      };
-      entities[cur.id] = { ...cur, position };
+      if (dist <= stop) {
+        // A minion at its waypoint turns to the next one; past the last it marches on the heart.
+        if (!target && cur.kind === "minion") entities[cur.id] = { ...cur, waypoint: (cur.waypoint ?? 1) + 1 };
+        continue;
+      }
+      if (cur.speed <= 0) continue;
+      const speed = cur.speed * (cur.moveStyle === "hover" ? 1 : groundFactor(terrain, cur.position.x, cur.position.z));
+      const stepLen = cur.moveStyle === "teleport" ? dist - stop : Math.min(speed * dt, dist - stop);
+      let next: { x: number; z: number };
+      if (cur.moveStyle === "teleport") {
+        next = { x: cur.position.x + (dx / dist) * stepLen, z: cur.position.z + (dz / dist) * stepLen };
+      } else {
+        // Stuck for two seconds without getting closer: try going round the other way.
+        const prog = this.progress.get(cur.id);
+        let side = this.avoidSide.get(cur.id) ?? 0;
+        if (!prog || dist < prog.best - 0.05) this.progress.set(cur.id, { best: dist, since: now });
+        else if (now - prog.since > 2000) {
+          side = side === 1 ? -1 : 1;
+          this.progress.set(cur.id, { best: dist, since: now });
+        }
+        const r = stepAround(terrain, cur.position, goal, stepLen, cur.size, side);
+        this.avoidSide.set(cur.id, r.side);
+        next = r;
+      }
+      const position: Vec3 = { x: next.x, y: 0, z: next.z };
+      entities[cur.id] = { ...entities[cur.id]!, position };
       items.push([cur.id, round(position.x), 0, round(position.z)]);
     }
     this.state = { ...this.state, entities, tick: this.state.tick + 1 };
@@ -477,7 +655,14 @@ export class World {
     for (const e of Object.values(this.state.entities)) {
       if (!this.live) break;
       if (e.heart) continue;
-      const target = e.targetEntityId ? this.state.entities[e.targetEntityId] : undefined;
+      let target = e.targetEntityId ? this.state.entities[e.targetEntityId] : undefined;
+      if (e.kind === "tower") {
+        // Towers re-aim every tick at whatever is nearest inside their range.
+        target = this.pickTarget(e, this.state.entities);
+        if ((target?.id ?? null) !== e.targetEntityId) {
+          this.state = { ...this.state, entities: { ...this.state.entities, [e.id]: { ...e, targetEntityId: target?.id ?? null } } };
+        }
+      }
       const dist = target ? Math.hypot(target.position.x - e.position.x, target.position.z - e.position.z) : Infinity;
       const inReach = target !== undefined && dist <= reach(e, target) + 0.05;
       if (!inReach) {
@@ -485,7 +670,8 @@ export class World {
         continue;
       }
       if (e.attack <= 0 || (this.cooldownUntil.get(e.id) ?? 0) > now) continue;
-      this.cooldownUntil.set(e.id, now + ATTACK_COOLDOWN_S * 1000 * (0.8 + Math.random() * 0.4));
+      const cooldown = e.kind === "tower" ? TOWER_COOLDOWN_S : ATTACK_COOLDOWN_S;
+      this.cooldownUntil.set(e.id, now + cooldown * 1000 * (0.8 + Math.random() * 0.4));
       const dmg = Math.max(1, Math.round(e.attack * HIT_FRACTION * (0.75 + Math.random() * 0.5)));
       this.attack(e.id, target!.id, dmg, "", true);
     }
@@ -502,22 +688,36 @@ export class World {
     if (whole > 0) this.emit({ type: "heal", entityId: e.id, hp: Math.min(e.maxHp, e.hp + whole) });
   }
 
-  /** Nearest enemy creature within aggro range, else the enemy heart. */
+  /**
+   * Nearest enemy (creature, minion or tower) within reach: aggro range for summons and minions,
+   * firing range for towers. Summons with nothing in reach march on the enemy heart; minions at
+   * the end of their lane do too; towers wait.
+   */
   private pickTarget(e: EntitySpec, entities: WorldState["entities"]): EntitySpec | undefined {
     const team = this.teamOf(e.ownerId);
     if (!team) return undefined;
     let best: EntitySpec | undefined;
-    let bestDist = AGGRO_RADIUS;
+    const range = e.kind === "tower" ? (e.range ?? TOWER_RANGE) : e.kind === "minion" ? MINION_AGGRO_RADIUS : AGGRO_RADIUS;
+    let bestDist = Infinity;
     for (const other of Object.values(entities)) {
       if (other.id === e.id || other.heart || other.hp <= 0) continue;
       if (this.teamOf(other.ownerId) === team) continue;
-      const d = Math.hypot(other.position.x - e.position.x, other.position.z - e.position.z);
+      let d = Math.hypot(other.position.x - e.position.x, other.position.z - e.position.z) - (other.kind === "tower" ? other.size * 0.5 : 0);
+      if (d >= range) continue;
+      // Towers shoot minions first, so a summon that pushes in behind a wave gets a window.
+      if (e.kind === "tower" && other.kind !== "minion") d += range;
       if (d < bestDist) {
         best = other;
         bestDist = d;
       }
     }
-    return best ?? entities[heartId(otherTeam(team))];
+    if (best) return best;
+    if (e.kind === "tower") return undefined;
+    if (e.kind === "minion") {
+      const lane = this.state.terrain.lanes.find((l) => l.id === e.lane);
+      if (lane && (e.waypoint ?? 1) < lane.points.length) return undefined;
+    }
+    return entities[heartId(otherTeam(team))];
   }
 
   snapshot(): WorldState {
@@ -540,8 +740,13 @@ export class World {
           `- ${p.identity} "${p.name}" team ${TEAM_INFO[p.team].name}, level ${p.level}, score ${p.score}, mic bank ${Math.round(p.micBank)}s${p.talents.length ? `, talents ${p.talents.join("/")}` : ""}`,
       )
       .join("\n");
+    const field = TEAM_IDS.map((team) => {
+      const towers = Object.values(this.state.entities).filter((e) => e.kind === "tower" && e.ownerId === heartOwner(team));
+      const minions = Object.values(this.state.entities).filter((e) => e.kind === "minion" && e.ownerId === heartOwner(team)).length;
+      return `- ${TEAM_INFO[team].name}: towers ${towers.length ? towers.map((t) => `${t.lane} ${t.hp}/${t.maxHp}`).join(", ") : "all fallen"}; ${minions} minions on the field`;
+    }).join("\n");
     const entities = Object.values(this.state.entities)
-      .filter((e) => !e.heart)
+      .filter(isSummon)
       .sort((a, b) => a.bornAt - b.bornAt)
       .map((e) => {
         const owner = this.state.players[e.ownerId]?.name ?? e.ownerId;
@@ -553,11 +758,12 @@ export class World {
       .join("\n");
     const env = this.state.environment;
     const m = this.state.match;
-    return `Match ${m.number} (${m.phase}).\nTeams:\n${teams}\n\nPlayers:\n${players || "- none"}\n\nCreatures (${Object.values(this.state.entities).filter((e) => !e.heart).length}):\n${entities || "- none"}\n\nEnvironment: mood "${env.mood}", gravity ${env.gravity}, sky ${env.skyTop}/${env.skyBottom}`;
+    return `Match ${m.number} (${m.phase}), minion wave ${this.state.wave}.\nTeams:\n${teams}\n\nField (three lanes, north/mid/south, a tower per team on each; lane minions march every half minute):\n${field}\n\nPlayers:\n${players || "- none"}\n\nCreatures (${Object.values(this.state.entities).filter(isSummon).length}):\n${entities || "- none"}\n\nEnvironment: mood "${env.mood}", gravity ${env.gravity}, sky ${env.skyTop}/${env.skyBottom}`;
   }
 }
 
-const reach = (a: EntitySpec, b: EntitySpec): number => (a.size + b.size) * 0.5 + 0.4;
+/** How close a must be to b to hit it: arm's length for creatures, firing range for towers. */
+const reach = (a: EntitySpec, b: EntitySpec): number => (a.kind === "tower" ? (a.range ?? TOWER_RANGE) : (a.size + b.size) * 0.5 + 0.4);
 
 /** Somewhere on the team's half, between the centre and its heart. */
 function spawnPosition(team: TeamId, count: number): Vec3 {

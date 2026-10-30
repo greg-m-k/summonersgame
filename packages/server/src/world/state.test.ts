@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { SECONDS_PER_POINT, type SummonInput, type TeamId, type WorldEvent, heartId } from "@summoners/shared";
+import { SECONDS_PER_POINT, type SummonInput, type TeamId, type WorldEvent, heartId, isSummon } from "@summoners/shared";
+import { FIRST_WAVE_MS, MINIONS_PER_LANE, WAVE_INTERVAL_MS, distToLane } from "@summoners/shared";
 import { World } from "./state.ts";
 
 const base = (ownerId: string, over: Partial<SummonInput> = {}): SummonInput => ({
@@ -47,12 +48,15 @@ describe("World", () => {
     w.addPlayer("p2", "B", "y");
     // attack 0 so the engine never swings by itself; only the ordered strikes count here
     const a = w.summon(base("p1", { attack: 0, speed: 100 }));
-    const b = w.summon(base("p2", { hp: 60, attack: 0 }));
+    // b stands still: a marching b would walk into an ash tower and die before a arrives.
+    const b = w.summon(base("p2", { hp: 60, attack: 0, speed: 0 }));
     const r1 = w.attack(a.id, b.id, 50, "bonk");
     expect(r1).toEqual({ targetHp: 10, destroyed: false });
     expect(w.entity(a.id)?.targetEntityId).toBe(b.id);
-    const packet = w.step(1);
+    const packet = w.step(0.1);
     expect(packet?.items[0]?.[0]).toBe(a.id);
+    // Fast, but it still has to walk round whatever rocks lie between them.
+    for (let i = 0; i < 30; i++) w.step(0.1);
     const moved = w.entity(a.id)!;
     const dist = Math.hypot(moved.position.x - b.position.x, moved.position.z - b.position.z);
     expect(dist).toBeLessThanOrEqual((a.size + b.size) * 0.5 + 0.4 + 0.02);
@@ -112,7 +116,7 @@ describe("World", () => {
     expect(w.step(0.1)).toBeNull();
     w.startMatch();
     expect(w.state.match).toMatchObject({ number: 2, phase: "live" });
-    expect(Object.values(w.state.entities).filter((e) => !e.heart)).toHaveLength(0);
+    expect(Object.values(w.state.entities).filter(isSummon)).toHaveLength(0);
     expect(w.entity(heartId("tide"))?.hp).toBe(1200);
     expect(w.player("p1")!.score).toBe(0);
   });
@@ -190,5 +194,103 @@ describe("World", () => {
     expect(w.entity(e.id)?.imageUrl).toBe("/api/img/1");
     w.transform(e.id, { imagePrompt: "a bigger thing" }, "mutates");
     expect(w.entity(e.id)?.imageUrl).toBeNull();
+  });
+
+  it("lays a field with three lanes, a tower per team per lane, and rocks that stay off the lanes", () => {
+    const w = new World("field-room", () => 1000);
+    const t = w.terrain;
+    expect(t.lanes.map((l) => l.id)).toEqual(["north", "mid", "south"]);
+    expect(t.obstacles.length).toBeGreaterThanOrEqual(8);
+    for (const o of t.obstacles) for (const l of t.lanes) expect(distToLane(o, l)).toBeGreaterThan(o.r + 1);
+    const towers = Object.values(w.state.entities).filter((e) => e.kind === "tower");
+    expect(towers).toHaveLength(6);
+    expect(new Set(towers.map((e) => e.ownerId))).toEqual(new Set(["team:ash", "team:tide"]));
+    // Same room and match number, same field; next match, a different one.
+    expect(new World("field-room", () => 5).terrain).toEqual(t);
+    w.hooks.onHeartDown = (team) => w.endMatch(team, {});
+    w.destroy(heartId("tide"), "test");
+    w.startMatch();
+    expect(w.terrain.seed).not.toBe(t.seed);
+    expect(Object.values(w.state.entities).filter((e) => e.kind === "tower")).toHaveLength(6);
+  });
+
+  it("creatures walk around rocks instead of through them", () => {
+    const { w, advance } = clockWorld();
+    w.addPlayer("p1", "A", "x"); // ash, marches toward the tide heart at x = -11
+    const e = w.summon(base("p1", { attack: 0, speed: 4, size: 1, hp: 1000 }));
+    w.transform(e.id, { hp: 100_000 }, "sturdy");
+    const solid = w.terrain.obstacles.filter((o) => o.kind !== "pool");
+    for (let i = 0; i < 120; i++) {
+      advance(100);
+      w.step(0.1);
+      const cur = w.entity(e.id)!;
+      for (const o of solid) {
+        expect(Math.hypot(cur.position.x - o.x, cur.position.z - o.z)).toBeGreaterThan(o.r + 0.6 * 1 - 0.05);
+      }
+    }
+    expect(w.entity(e.id)!.position.x).toBeLessThan(e.position.x);
+  });
+
+  it("sends minion waves down the lanes on a timer and the minions follow their waypoints", () => {
+    const { w, advance } = clockWorld();
+    const waves: number[] = [];
+    w.onEvent((ev) => {
+      if (ev.type === "wave") waves.push(ev.minions.length);
+    });
+    advance(FIRST_WAVE_MS - 1);
+    w.step(0.1);
+    expect(waves).toEqual([]);
+    advance(2);
+    w.step(0.1);
+    expect(waves).toEqual([3 * 2 * MINIONS_PER_LANE]);
+    expect(w.state.wave).toBe(1);
+    const minion = Object.values(w.state.entities).find((e) => e.kind === "minion" && e.ownerId === "team:ash")!;
+    const before = minion.position.x;
+    for (let i = 0; i < 30; i++) {
+      advance(100);
+      w.step(0.1);
+    }
+    const after = w.entity(minion.id)!;
+    expect(after.position.x).toBeLessThan(before); // ash minions walk toward tide at negative x
+    expect(after.waypoint ?? 1).toBeGreaterThanOrEqual(1);
+    advance(WAVE_INTERVAL_MS);
+    w.step(0.1);
+    expect(w.state.wave).toBe(2);
+    // With the tide mid tower down, ash sends siege minions up the mid lane.
+    w.destroy("tower-tide-mid", "test");
+    advance(WAVE_INTERVAL_MS);
+    w.step(0.1);
+    const siege = Object.values(w.state.entities).filter((e) => e.kind === "minion" && e.lane === "mid" && e.ownerId === "team:ash" && e.label.includes("siege"));
+    expect(siege.length).toBeGreaterThan(0);
+  });
+
+  it("towers shoot what comes in range and pay points when toppled", () => {
+    const { w, advance } = clockWorld();
+    w.addPlayer("p1", "A", "x"); // ash
+    w.addPlayer("p2", "B", "y"); // tide
+    const tower = w.entity("tower-tide-mid")!;
+    // A sturdy ash creature parked inside the tide tower's range.
+    const e = w.summon(base("p1", { attack: 0, speed: 0, hp: 5000 }));
+    w.transform(e.id, { speed: 0 }, "parked");
+    (w.state.entities[e.id] as { position: { x: number; z: number } }).position = { x: tower.position.x + 2, z: tower.position.z };
+    let shots = 0;
+    w.onEvent((ev) => {
+      if (ev.type === "attack" && ev.attackerId === tower.id) shots++;
+    });
+    for (let i = 0; i < 30; i++) {
+      advance(100);
+      w.step(0.1);
+    }
+    expect(shots).toBeGreaterThanOrEqual(2);
+    expect(w.entity(e.id)!.hp).toBeLessThan(5000);
+    // Toppling it pays the owner three points.
+    const hammer = w.summon(base("p1", { attack: 0, speed: 0 }));
+    const paid: WorldEvent[] = [];
+    w.onEvent((ev) => {
+      if (ev.type === "points") paid.push(ev);
+    });
+    w.attack(hammer.id, tower.id, 100_000, "smash");
+    expect(w.entity(tower.id)).toBeUndefined();
+    expect(paid.find((ev) => ev.type === "points" && ev.reason.includes("toppling"))).toBeDefined();
   });
 });

@@ -1,4 +1,4 @@
-import { heartId } from "@summoners/shared";
+import { heartId, isSummon } from "@summoners/shared";
 import { api } from "../api.ts";
 import type { Scenario } from "../scenario.ts";
 
@@ -10,10 +10,11 @@ const LINES = [
 ];
 
 /**
- * The versus rules: four players split into two teams, one summon each, then nobody speaks. The
- * engine must make the creatures march and fight, wound a heart, pay points, let a demon offer a
- * bribe, end the match when a heart falls, and start the next one. Start the server with a small
- * HEART_HP (400 or so) to keep this under three minutes.
+ * The versus rules: four players split into two teams, one summon each, then each repeats its line
+ * every half minute the way a real player keeps talking; nobody orders anything. The engine must make
+ * the creatures march and fight through towers and minion waves, wound a heart, pay points, let a
+ * demon offer a bribe, end the match when a heart falls, and start the next one. Start the server
+ * with a small HEART_HP (400 or so) to keep this under four minutes.
  */
 export const versus: Scenario = {
   name: "versus",
@@ -35,13 +36,29 @@ export const versus: Scenario = {
     const summons = await Promise.all(bots.map((b) => b.waitFor(["summon"], ctx.gmTimeout + 20_000, t0, (e) => e.text.includes(b.name))));
     ctx.check("every player's summon appeared", summons.every(Boolean), summons.map((s) => s?.text.split('"')[1] ?? "none").join(", "));
 
-    // From here nobody says a word. The engine has to do everything else.
+    // From here nobody gives an order; they only keep summoning. The engine has to do everything else.
+    let talking = true;
+    const chatter = (async () => {
+      while (talking) {
+        await ctx.sleep(30_000);
+        if (!talking) break;
+        for (let i = 0; i < bots.length; i++) {
+          if (bots[i]!.world.match.phase === "live") await bots[i]!.say(LINES[i]!).catch(() => {});
+        }
+      }
+    })();
     const fight = await a.waitFor(["fight"], 45_000, t0);
     ctx.check("creatures engaged on their own, nobody spoke", Boolean(fight), fight?.text);
-    await ctx.sleep(15_000);
-    await a.refreshWorld();
-    const nowHearts = [heartId("ash"), heartId("tide")].map((id) => a.world.entities[id]);
-    const hurt = nowHearts.some((h) => !h || h.hp < h.maxHp);
+    // Towers and minion waves stand between the summons and the hearts now, so give it a while.
+    const hurtBy = Date.now() + 150_000;
+    let nowHearts = [heartId("ash"), heartId("tide")].map((id) => a.world.entities[id]);
+    let hurt = false;
+    while (!hurt && Date.now() < hurtBy) {
+      await ctx.sleep(5000);
+      await a.refreshWorld();
+      nowHearts = [heartId("ash"), heartId("tide")].map((id) => a.world.entities[id]);
+      hurt = nowHearts.some((h) => !h || h.hp < h.maxHp);
+    }
     ctx.check("a heart took damage", hurt, nowHearts.map((h) => (h ? `${h.label} ${h.hp}/${h.maxHp}` : "fallen")).join(", "));
     ctx.check("the engine swung more than ten times", a.autoHits > 10, `${a.autoHits} swings`);
     const paid = await a.waitFor(["points"], 60_000, t0, (e) => /killing|wounding/.test(e.text));
@@ -51,7 +68,7 @@ export const versus: Scenario = {
     while (!bots.some((b) => b.secrets.length) && Date.now() - start < 90_000) await ctx.sleep(1000);
     ctx.check("a demon offered someone a bribe", bots.some((b) => b.secrets.length > 0), bots.flatMap((b) => b.secrets).join(" | "));
 
-    const over = await a.waitFor(["match"], 180_000, t0, (e) => e.text.includes("over"));
+    const over = await a.waitFor(["match"], 300_000, t0, (e) => e.text.includes("over"));
     ctx.check("a heart fell and the match ended with a reveal", Boolean(over), over?.text);
 
     // Progression: points became XP, somebody levelled, and a talent point can be spent.
@@ -77,11 +94,13 @@ export const versus: Scenario = {
     }
     const next = await a.waitFor(["match"], 30_000, over ? over.t + 1 : t0, (e) => e.text.includes("begins"));
     await a.refreshWorld();
-    const creatures = Object.values(a.world.entities).filter((e) => !e.heart).length;
+    const creatures = Object.values(a.world.entities).filter(isSummon).length;
     const fresh = [heartId("ash"), heartId("tide")].every((id) => {
       const h = a.world.entities[id];
       return h && h.hp === h.maxHp;
     });
     ctx.check("the next match started with a clean arena and whole hearts", Boolean(next) && creatures === 0 && fresh, `${creatures} creatures, hearts ${fresh ? "whole" : "not whole"}`);
+    talking = false;
+    await chatter;
   },
 };

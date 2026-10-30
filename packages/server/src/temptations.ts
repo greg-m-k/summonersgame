@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { type DemonMessage, SECONDS_PER_POINT, type SecretMessage, type WorldEvent } from "@summoners/shared";
+import { type DemonMessage, SECONDS_PER_POINT, type SecretMessage, type WorldEvent, isSummon } from "@summoners/shared";
 import type { World } from "./world/state.ts";
 
 export interface TemptationHooks {
@@ -194,9 +194,9 @@ export class Temptations {
     const p = this.world.player(playerId);
     if (!p) return null;
     const entities = Object.values(this.world.state.entities);
-    const mine = entities.filter((e) => e.ownerId === playerId && !e.heart);
+    const mine = entities.filter((e) => e.ownerId === playerId && isSummon(e));
     const teammates = Object.values(this.world.state.players).filter((o) => o.team === p.team && o.identity !== playerId);
-    const theirs = entities.filter((e) => !e.heart && teammates.some((o) => o.identity === e.ownerId));
+    const theirs = entities.filter((e) => isSummon(e) && teammates.some((o) => o.identity === e.ownerId));
     const options: Array<() => Temptation> = [];
     const base = (kind: Kind, text: string, reward: number, payload: Temptation["payload"], ttl = EXPIRES_MS): Temptation => ({
       id: randomBytes(4).toString("hex"),

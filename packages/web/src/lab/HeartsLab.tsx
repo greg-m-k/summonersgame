@@ -1,7 +1,7 @@
 import { OrbitControls, Stars } from "@react-three/drei";
 import { Canvas } from "@react-three/fiber";
 import { Bloom, EffectComposer, Vignette } from "@react-three/postprocessing";
-import { type EntitySpec, TEAM_IDS, TEAM_INFO, DEFAULT_ENVIRONMENT, heartId, heartOwner } from "@summoners/shared";
+import { type EntitySpec, TEAM_IDS, TEAM_INFO, DEFAULT_ENVIRONMENT, generateTerrain, heartId, heartOwner } from "@summoners/shared";
 import { Arena } from "../world/Arena.tsx";
 import { useMemo } from "react";
 import { Heart3D, type HeartLook } from "../world/heart3d/Heart3D.tsx";
@@ -62,7 +62,7 @@ export function HeartsLab() {
           <ambientLight color={env.ambient} intensity={1.1} />
           <hemisphereLight args={[env.skyTop, env.groundColor, 0.8]} />
           <directionalLight position={[12, 24, 10]} intensity={1.6} color="#ffffff" />
-          <Arena env={env} />
+          <Arena env={env} terrain={generateTerrain(3)} />
           {hearts.map((h, i) => (
             <group key={h.team} position={[i === 0 ? -14 : 14, 2, 0]}>
               <Heart3D entity={h.entity} team={h.team} lookOverride={look} />

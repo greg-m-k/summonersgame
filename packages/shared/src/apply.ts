@@ -79,9 +79,15 @@ export function applyEvent(state: WorldState, ev: WorldEvent): WorldState {
     case "match_started": {
       const entities: WorldState["entities"] = {};
       for (const h of ev.hearts) entities[h.id] = h;
+      for (const t of ev.towers) entities[t.id] = t;
       const players: WorldState["players"] = {};
       for (const [id, p] of Object.entries(state.players)) players[id] = { ...p, score: 0 };
-      return { ...state, match: ev.match, entities, players };
+      return { ...state, match: ev.match, entities, players, terrain: ev.terrain, wave: 0 };
+    }
+    case "wave": {
+      const entities = { ...state.entities };
+      for (const m of ev.minions) entities[m.id] = m;
+      return { ...state, entities, wave: ev.number };
     }
     case "match_over":
       return { ...state, match: ev.match };

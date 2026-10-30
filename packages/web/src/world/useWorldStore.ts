@@ -50,6 +50,8 @@ function describe(ev: WorldEvent, world: WorldState): string | null {
   switch (ev.type) {
     case "summon":
       return `${name(ev.entity.ownerId)} summons ${ev.entity.label}`;
+    case "wave":
+      return ev.number % 3 === 0 ? `Wave ${ev.number}: brutes lead the minions down the lanes` : `Wave ${ev.number} marches down the lanes`;
     case "attack": {
       if (!ev.auto) return `${label(ev.attackerId)} hits ${label(ev.targetId)} for ${ev.damage}: ${ev.flavor}`;
       // The engine swings every second or so; only heart wounds that cross a quarter make the feed.
@@ -57,8 +59,13 @@ function describe(ev: WorldEvent, world: WorldState): string | null {
       if (!t?.heart || quarter(t.hp, t.maxHp) === quarter(ev.targetHp, t.maxHp)) return null;
       return `${label(ev.attackerId)} wounds the ${t.label} (${ev.targetHp} hp left)`;
     }
-    case "destroy":
+    case "destroy": {
+      const e = world.entities[ev.entityId];
+      // Minions die by the dozen; only towers and creatures make the feed.
+      if (e?.kind === "minion") return null;
+      if (e?.kind === "tower") return `The ${e.label} falls (${ev.cause})`;
       return `${label(ev.entityId)} is gone (${ev.cause})`;
+    }
     case "transform":
       return `${ev.entity.label}: ${ev.description}`;
     case "warp_world":
@@ -105,9 +112,14 @@ export const useWorldStore = create<WorldStore>((set) => ({
       if (ev.type === "summon") {
         next.positions = { ...s.positions, [ev.entity.id]: [ev.entity.position.x, 0, ev.entity.position.z] };
       }
+      if (ev.type === "wave") {
+        const positions = { ...s.positions };
+        for (const m of ev.minions) positions[m.id] = [m.position.x, 0, m.position.z];
+        next.positions = positions;
+      }
       if (ev.type === "match_started") {
         const positions: WorldStore["positions"] = {};
-        for (const h of ev.hearts) positions[h.id] = [h.position.x, 0, h.position.z];
+        for (const h of [...ev.hearts, ...ev.towers]) positions[h.id] = [h.position.x, 0, h.position.z];
         next.positions = positions;
         next.hits = {};
         next.ghosts = [];

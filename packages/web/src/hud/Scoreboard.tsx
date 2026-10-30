@@ -1,5 +1,5 @@
 import type { CSSProperties } from "react";
-import { TEAM_IDS, TEAM_INFO, heartId } from "@summoners/shared";
+import { TEAM_IDS, TEAM_INFO, heartId, isSummon } from "@summoners/shared";
 import { useCostStore, usd } from "../room/useCostStore.ts";
 import { useWorldStore } from "../world/useWorldStore.ts";
 
@@ -8,7 +8,7 @@ export function Scoreboard({ me }: { me: string }) {
   const entities = useWorldStore((s) => s.world.entities);
   const match = useWorldStore((s) => s.world.match);
   const cost = useCostStore((s) => s.summary);
-  const creatures = Object.values(entities).filter((e) => !e.heart).length;
+  const creatures = Object.values(entities).filter(isSummon).length;
 
   return (
     <div className={`scoreboard${cost?.overBudget ? " over-budget" : ""}`}>

@@ -1,0 +1,69 @@
+{
+  "grid": {
+    "cell": 2,
+    "majorEvery": 5,
+    "lineAlpha": 0.06,
+    "farFade": 0.02
+  },
+  "fogScale": 0.85,
+  "stars": {
+    "count": 1800,
+    "factor": 4,
+    "saturation": 0.6
+  },
+  "lights": {
+    "ambient": 0.45,
+    "hemisphere": 0.8,
+    "sun": 2.4,
+    "sunColor": "#ffe2cc"
+  },
+  "bloom": {
+    "intensity": 0.85,
+    "threshold": 0.7
+  },
+  "lane": {
+    "color": "#b48cff",
+    "width": 2.6,
+    "alpha": 0.14,
+    "edgeAlpha": 0.28
+  },
+  "rock": {
+    "color": "#6a5a80",
+    "roughness": 0.95,
+    "emissive": "#1a0f33",
+    "emissiveIntensity": 0.2
+  },
+  "pillar": {
+    "color": "#8a7f9e",
+    "capColor": "#d8c8ff",
+    "capIntensity": 1.2,
+    "roughness": 0.85
+  },
+  "crystal": {
+    "color": "#7a4dff",
+    "emissive": "#b48cff",
+    "emissiveIntensity": 1.6,
+    "opacity": 0.85
+  },
+  "ruin": {
+    "color": "#4a3a6c",
+    "roughness": 0.9
+  },
+  "pool": {
+    "color": "#0a0614",
+    "emissive": "#8a5cff",
+    "emissiveIntensity": 0.7,
+    "rimAlpha": 0.35
+  },
+  "tower": {
+    "bodyColor": "#1b1030",
+    "roughness": 0.55,
+    "eyeIntensity": 3,
+    "lightIntensity": 12,
+    "ringAlpha": 0.55
+  },
+  "minion": {
+    "emissiveIntensity": 1.3,
+    "roughness": 0.7
+  }
+}

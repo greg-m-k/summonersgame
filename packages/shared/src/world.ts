@@ -68,6 +68,8 @@ export type SummonInput = z.infer<typeof SummonInput>;
 export const EntitySpec = SummonInput.extend({
   id: z.string(),
   imageUrl: z.string().nullable(),
+  /** Towers and minions have no picture, so no prompt. */
+  imagePrompt: z.string().max(300),
   /** Summons are capped at 1000 hp by the game master's schema; hearts and transforms are not. */
   hp: z.number().int().min(0),
   maxHp: z.number().int().min(1),
@@ -77,6 +79,13 @@ export const EntitySpec = SummonInput.extend({
   bornAt: z.number(),
   /** A team's heart: it does not move or attack, and the match ends when it dies. */
   heart: z.boolean().optional(),
+  /** What this is when it is not a player's summon: a lane minion or a tower. */
+  kind: z.enum(["minion", "tower"]).optional(),
+  /** Minions: the lane they walk and the next waypoint on it. */
+  lane: z.string().optional(),
+  waypoint: z.number().int().optional(),
+  /** Towers: how far they shoot. */
+  range: z.number().optional(),
   /** Owner id of whoever hit this last, for kill credit and bribe checks. */
   lastHitBy: z.string().nullable().optional(),
   /** Kills this creature made; each one makes it 10% stronger (shown as stars). */
@@ -111,6 +120,46 @@ export const DEFAULT_ENVIRONMENT: Environment = {
   mood: "uneasy violet calm",
 };
 
+// ---- the field ------------------------------------------------------------------------------------
+// Schemas live here (the generator in terrain.ts needs the constants above, and a cycle would bite).
+
+export const ObstacleKind = z.enum(["rock", "pillar", "crystal", "ruin", "pool"]);
+export type ObstacleKind = z.infer<typeof ObstacleKind>;
+
+export const Obstacle = z.object({
+  id: z.string(),
+  kind: ObstacleKind,
+  x: z.number(),
+  z: z.number(),
+  /** Footprint radius in meters; pools slow instead of block. */
+  r: z.number(),
+  /** Height in meters, for the client. */
+  h: z.number(),
+  /** Yaw in radians, for the client. */
+  rot: z.number(),
+});
+export type Obstacle = z.infer<typeof Obstacle>;
+
+export const LaneId = z.enum(["north", "mid", "south"]);
+export type LaneId = z.infer<typeof LaneId>;
+export const LANE_IDS: readonly LaneId[] = ["north", "mid", "south"];
+
+export const Lane = z.object({
+  id: LaneId,
+  /** Waypoints from the Ash heart to the Tide heart; Tide's minions walk them backwards. */
+  points: z.array(z.object({ x: z.number(), z: z.number() })),
+});
+export type Lane = z.infer<typeof Lane>;
+
+export const Terrain = z.object({
+  seed: z.number().int(),
+  obstacles: z.array(Obstacle),
+  lanes: z.array(Lane),
+});
+export type Terrain = z.infer<typeof Terrain>;
+
+export const EMPTY_TERRAIN: Terrain = { seed: 0, obstacles: [], lanes: [] };
+
 export const PlayerState = z.object({
   identity: z.string(),
   name: z.string(),
@@ -137,15 +186,23 @@ export const WorldState = z.object({
   environment: Environment,
   players: z.record(z.string(), PlayerState),
   match: MatchState,
+  terrain: Terrain,
+  /** Minion waves sent so far this match. */
+  wave: z.number().int(),
 });
 export type WorldState = z.infer<typeof WorldState>;
+
+/** A player's summon, as opposed to a heart, a tower or a lane minion. */
+export const isSummon = (e: { heart?: boolean; kind?: string }): boolean => !e.heart && !e.kind;
+/** Something that stands still and ends or guards the match. */
+export const isStructure = (e: { heart?: boolean; kind?: string }): boolean => Boolean(e.heart) || e.kind === "tower";
 
 /** Snapshot sent through room metadata so late joiners catch up. */
 export const WorldSnapshot = WorldState;
 export type WorldSnapshot = WorldState;
 
 export function emptyWorld(room: string): WorldState {
-  return { room, tick: 0, entities: {}, environment: { ...DEFAULT_ENVIRONMENT }, players: {}, match: { ...DEFAULT_MATCH } };
+  return { room, tick: 0, entities: {}, environment: { ...DEFAULT_ENVIRONMENT }, players: {}, match: { ...DEFAULT_MATCH }, terrain: EMPTY_TERRAIN, wave: 0 };
 }
 
 /** Which team an owner id belongs to: a team's own heart, or a player's team. */

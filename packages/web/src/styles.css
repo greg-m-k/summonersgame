@@ -99,6 +99,7 @@ button { font: inherit; }
 .label-name { font-size: 12px; font-weight: 700; letter-spacing: 0.06em; color: #fff; text-shadow: 0 0 6px #000, 0 0 2px #000; white-space: nowrap; }
 .label-hp { width: 70px; height: 5px; border-radius: 3px; background: rgba(0,0,0,0.6); overflow: hidden; }
 .label-hp i { display: block; height: 100%; transition: width 0.3s ease; }
+.label-small .label-hp { width: 28px; height: 3px; }
 
 /* Demon chat: subtitles for your own demon plus a text box that reaches it */
 .demon-chat {

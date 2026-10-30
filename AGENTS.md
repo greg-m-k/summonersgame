@@ -53,7 +53,14 @@ for short matches). Against production: `GAME_SERVER_URL=https://games.greg.kitc
   deploy, wait for `/api/health` and give the container rollout a couple of minutes before testing.
 - The agents image must keep `ca-certificates`; without it the native LiveKit engine cannot open TLS and demons
   die silently. `GET /api/rooms/ROOM/debug` (with `x-game-secret`) is where "no demon" problems show first.
-- Hearts are static pictures in `packages/web/public/hearts`; repaint with `node scripts/paint-hearts.mjs <team>`.
+- Hearts, towers, minions and the field are procedural 3D, no image calls: `web/src/world/heart3d/`,
+  `Tower3D.tsx`, `Minion3D.tsx`, `Terrain3D.tsx`. Their looks are parameter files (`heartLook.json`,
+  `arenaLook.json`) tuned by an AI art director: `node scripts/judge-look.mjs <hearts|arena> [rounds]` renders
+  `/lab/hearts` or `/lab/arena` headless, has Opus score the frames, applies its patch, keeps the best round.
+  Run it with the web dev server up; it costs a few cents a round and the scores are noisy past about 6/10.
+- The field (lanes, towers, obstacles) is generated from a seed in `shared/src/terrain.ts`, carried in
+  `match_started`, and rebuilt identically by every peer. Movement goes through `stepAround`; entities that
+  are not summons carry `kind: "tower" | "minion"` and most "creature" filters should use `isSummon`.
 - Chroma key: sprites sample their own border for the key colour and compare chromaticity. If a picture shows
   a square, the model ignored the magenta prompt; the fix is in the shader or the prompt, not in the server.
 - Costs are metered at list prices into `CostLedger`; anything that calls a paid API must report usage
@@ -62,7 +69,7 @@ for short matches). Against production: `GAME_SERVER_URL=https://games.greg.kitc
 ## Where things are decided
 
 - Game rules (teams, hearts, engine constants, points): `packages/shared/src/world.ts` and
-  `packages/server/src/world/state.ts`.
+  `packages/server/src/world/state.ts`; lanes, towers, minion waves, obstacle steering: `packages/shared/src/terrain.ts`.
 - Talents: `packages/shared/src/talents.ts`; effects applied in `state.ts` (`summon`, `attack`, `regrow`).
 - Bribes: `packages/server/src/temptations.ts`.
 - Game master prompt and tools: `packages/server/src/gm/`; the Haiku router that reads every line first is `gm/router.ts`

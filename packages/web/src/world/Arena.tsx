@@ -1,8 +1,10 @@
 import { Stars } from "@react-three/drei";
 import { useMemo } from "react";
 import { BackSide, Color, ShaderMaterial } from "three";
-import { ARENA_RADIUS, SPAWN_RADIUS, type Environment } from "@summoners/shared";
+import { ARENA_RADIUS, type Environment, type Terrain } from "@summoners/shared";
+import baseLook from "./arenaLook.json";
 import { Ground } from "./Ground.tsx";
+import { type ArenaLook, Terrain3D } from "./Terrain3D.tsx";
 
 const skyVert = /* glsl */ `
   varying vec3 vPos;
@@ -22,7 +24,8 @@ const skyFrag = /* glsl */ `
   }
 `;
 
-export function Arena({ env }: { env: Environment }) {
+export function Arena({ env, terrain, lookOverride }: { env: Environment; terrain: Terrain; lookOverride?: ArenaLook }) {
+  const L = lookOverride ?? baseLook;
   const sky = useMemo(
     () =>
       new ShaderMaterial({
@@ -43,12 +46,9 @@ export function Arena({ env }: { env: Environment }) {
       <mesh material={sky} frustumCulled={false}>
         <sphereGeometry args={[900, 32, 16]} />
       </mesh>
-      <Stars radius={120} depth={40} count={1800} factor={4} saturation={0.6} fade speed={0.4} />
-      <Ground groundColor={env.groundColor} lineColor={env.ambient} fogColor={env.fogColor} fogDensity={env.fogDensity * 0.6} />
-      <mesh rotation-x={-Math.PI / 2} position-y={0.02}>
-        <ringGeometry args={[SPAWN_RADIUS - 0.08, SPAWN_RADIUS + 0.08, 96]} />
-        <meshBasicMaterial color={env.ambient} transparent opacity={0.35} />
-      </mesh>
+      <Stars radius={120} depth={40} count={L.stars.count} factor={L.stars.factor} saturation={L.stars.saturation} fade speed={0.4} />
+      <Ground groundColor={env.groundColor} lineColor={env.ambient} fogColor={env.fogColor} fogDensity={env.fogDensity * L.fogScale} grid={L.grid} />
+      <Terrain3D terrain={terrain} lookOverride={L} />
       <mesh rotation-x={-Math.PI / 2} position-y={0.015}>
         <ringGeometry args={[ARENA_RADIUS - 0.05, ARENA_RADIUS + 0.05, 128]} />
         <meshBasicMaterial color={env.ambient} transparent opacity={0.18} />

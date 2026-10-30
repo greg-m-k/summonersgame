@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { EntitySpec, Environment, MatchState, PlayerState, TeamId, Vec3 } from "./world.ts";
+import { EntitySpec, Environment, MatchState, PlayerState, TeamId, Terrain, Vec3 } from "./world.ts";
 
 export const WorldEvent = z.discriminatedUnion("type", [
   z.object({ type: z.literal("summon"), entity: EntitySpec }),
@@ -37,8 +37,10 @@ export const WorldEvent = z.discriminatedUnion("type", [
   z.object({ type: z.literal("player_joined"), player: PlayerState }),
   z.object({ type: z.literal("player_left"), playerId: z.string() }),
   z.object({ type: z.literal("player_updated"), player: PlayerState }),
-  /** A new match: the arena is cleared, scores reset, two fresh hearts placed. */
-  z.object({ type: z.literal("match_started"), match: MatchState, hearts: z.array(EntitySpec) }),
+  /** A new match: the arena is cleared, scores reset, a fresh field laid, two hearts and their towers placed. */
+  z.object({ type: z.literal("match_started"), match: MatchState, hearts: z.array(EntitySpec), towers: z.array(EntitySpec), terrain: Terrain }),
+  /** A minion wave: both teams' minions, one event instead of a dozen summons. */
+  z.object({ type: z.literal("wave"), number: z.number().int(), minions: z.array(EntitySpec) }),
   /** A heart fell. Scores are final and every bribe taken this match is revealed. */
   z.object({
     type: z.literal("match_over"),

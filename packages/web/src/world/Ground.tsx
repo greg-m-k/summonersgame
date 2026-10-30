@@ -25,6 +25,7 @@ const frag = /* glsl */ `
   uniform float cell;
   uniform float majorEvery;
   uniform float lineAlpha;
+  uniform float farFade;
   varying vec3 vWorld;
   varying float vFogDepth;
 
@@ -41,7 +42,7 @@ const frag = /* glsl */ `
     float major = gridLine(p, cell * majorEvery, 1.0);
     float dist = length(p);
     // lines thin out with distance so the far field is a calm haze, not moiré
-    float far = exp(-dist * 0.02);
+    float far = exp(-dist * farFade);
     float g = max(minor * 0.55, major) * lineAlpha * far;
     vec3 c = mix(ground, line, g);
     float fogFactor = 1.0 - exp(-fogDensity * fogDensity * vFogDepth * vFogDepth);
@@ -50,7 +51,14 @@ const frag = /* glsl */ `
   }
 `;
 
-export function Ground({ groundColor, lineColor, fogColor, fogDensity }: { groundColor: string; lineColor: string; fogColor: string; fogDensity: number }) {
+export interface GridLook {
+  cell: number;
+  majorEvery: number;
+  lineAlpha: number;
+  farFade: number;
+}
+
+export function Ground({ groundColor, lineColor, fogColor, fogDensity, grid }: { groundColor: string; lineColor: string; fogColor: string; fogDensity: number; grid: GridLook }) {
   const material = useMemo(
     () =>
       new ShaderMaterial({
@@ -59,9 +67,10 @@ export function Ground({ groundColor, lineColor, fogColor, fogDensity }: { groun
           line: { value: new Color(lineColor) },
           fogColor: { value: new Color(fogColor) },
           fogDensity: { value: fogDensity },
-          cell: { value: 2 },
-          majorEvery: { value: 5 },
-          lineAlpha: { value: 0.13 },
+          cell: { value: grid.cell },
+          majorEvery: { value: grid.majorEvery },
+          lineAlpha: { value: grid.lineAlpha },
+          farFade: { value: grid.farFade },
         },
         vertexShader: vert,
         fragmentShader: frag,
@@ -74,6 +83,10 @@ export function Ground({ groundColor, lineColor, fogColor, fogDensity }: { groun
   material.uniforms.line!.value.set(lineColor);
   material.uniforms.fogColor!.value.set(fogColor);
   material.uniforms.fogDensity!.value = fogDensity;
+  material.uniforms.cell!.value = grid.cell;
+  material.uniforms.majorEvery!.value = grid.majorEvery;
+  material.uniforms.lineAlpha!.value = grid.lineAlpha;
+  material.uniforms.farFade!.value = grid.farFade;
   return (
     <mesh rotation-x={-Math.PI / 2} material={material} receiveShadow frustumCulled={false}>
       <planeGeometry args={[1600, 1600, 1, 1]} />
